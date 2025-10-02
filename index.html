@@ -16,12 +16,16 @@
         }
 
         /* --- THEME DEFINITIONS --- */
-        body {
-            --bg-start: #0d121c; --bg-end: #101929; --bg-aurora: #1a2742;
-            --panel-bg: rgba(20, 29, 47, 0.5); --panel-border: rgba(255, 255, 255, 0.1);
-            --text-primary: #e1e8f2; --text-secondary: #8a9cb0; --text-book: #1d2b37;
-            --accent-primary: #ffc985; --accent-secondary: #ff9e78;
-            --book-page-bg: #f3f6f9; --shadow-heavy: rgba(0,0,0,0.3);
+       body {
+    margin: 0;
+    background: var(--bg-start);
+    font-family: var(--font-ui);
+    color: var(--text-primary);
+    overflow-x: hidden;   /* biar tidak meluber ke samping */
+    overflow-y: auto;     /* aktifkan scroll ke bawah */
+    min-height: 100vh;    /* lebih fleksibel daripada height:100vh */
+}
+
         }
         body.light-theme {
             --bg-start: #f0f4f9; --bg-end: #e6eaf3; --bg-aurora: #d4dceb;
@@ -67,31 +71,23 @@
         .book-canvas { flex: 1; display: grid; place-items: center; perspective: 2500px; }
         .book { width: 90%; max-width: 900px; height: 90%; max-height: 640px; position: relative; transition: transform var(--transition-speed) ease; }
         
-        .page {
+       .page {
      position: absolute; width: 50%; height: 100%; top: 0;
      background: var(--book-page-bg); color: var(--text-book);
      border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
      transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
-     /* Hapus 'overflow: hidden' dan tambahkan 'display: flex' */
-     display: flex; 
+     display: flex; /* Menggunakan flexbox untuk layout di dalam page */
  }
-       .page {
-            position: absolute; width: 50%; height: 100%; top: 0;
-            background: var(--book-page-bg); color: var(--text-book);
-            border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
-            transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
-            display: flex; /* Menggunakan flexbox untuk layout di dalam page */
-        }
-        .page-content {
-            padding: 40px;
-            overflow: auto;
-            -webkit-overflow-scrolling: touch; /* Performa scroll di iOS */
-            flex: 1; /* Mengisi ruang yang tersedia */
-            min-height: 0; /* Fix untuk flexbox scrolling */
-            font-family: var(--font-book);
-            line-height: 1.7;
-            text-align: justify;
-        }
+ .page-content {
+     padding: 40px;
+     overflow: auto;
+     -webkit-overflow-scrolling: touch; /* Performa scroll di iOS */
+     flex: 1; /* Mengisi ruang yang tersedia */
+     min-height: 0; /* Fix untuk flexbox scrolling */
+     font-family: var(--font-book);
+     line-height: 1.7;
+     text-align: justify;
+ }
         .page-content.cover-page { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .page-content .meta { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; font-family: var(--font-ui); text-align: left; }
         .page-content .title { font-size: 24px; margin: 8px 0 16px 0; font-weight: 600; text-align: left;}
@@ -935,4 +931,5 @@
 </body>
 
 </html>
+
 
