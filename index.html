@@ -75,28 +75,24 @@
      /* Hapus 'overflow: hidden' dan tambahkan 'display: flex' */
      display: flex; 
  }
-        .page-content {
-     padding: 40px;
-     overflow: auto; /* Properti ini tetap ada untuk mengaktifkan scroll */
-     -webkit-overflow-scrolling: touch; /* Menambah performa scroll di iOS */
-
-     /* Ganti 'height: 100%' dengan flexbox */
-     flex: 1;
-     min-height: 0;
-     
-     font-family: var(--font-book);
-     line-height: 1.7;
-     text-align: justify;
- }
-        
-        .page-content.cover-page {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
+       .page {
+            position: absolute; width: 50%; height: 100%; top: 0;
+            background: var(--book-page-bg); color: var(--text-book);
+            border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
+            transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
+            display: flex; /* Menggunakan flexbox untuk layout di dalam page */
         }
-
+        .page-content {
+            padding: 40px;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch; /* Performa scroll di iOS */
+            flex: 1; /* Mengisi ruang yang tersedia */
+            min-height: 0; /* Fix untuk flexbox scrolling */
+            font-family: var(--font-book);
+            line-height: 1.7;
+            text-align: justify;
+        }
+        .page-content.cover-page { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .page-content .meta { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; font-family: var(--font-ui); text-align: left; }
         .page-content .title { font-size: 24px; margin: 8px 0 16px 0; font-weight: 600; text-align: left;}
         .page-content p { margin-bottom: 1em; }
@@ -939,3 +935,4 @@
 </body>
 
 </html>
+
