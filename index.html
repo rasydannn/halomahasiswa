@@ -16,16 +16,12 @@
         }
 
         /* --- THEME DEFINITIONS --- */
-       body {
-    margin: 0;
-    background: var(--bg-start);
-    font-family: var(--font-ui);
-    color: var(--text-primary);
-    overflow-x: hidden;   /* biar tidak meluber ke samping */
-    overflow-y: auto;     /* aktifkan scroll ke bawah */
-    min-height: 100vh;    /* lebih fleksibel daripada height:100vh */
-}
-
+        body {
+            --bg-start: #0d121c; --bg-end: #101929; --bg-aurora: #1a2742;
+            --panel-bg: rgba(20, 29, 47, 0.5); --panel-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #e1e8f2; --text-secondary: #8a9cb0; --text-book: #1d2b37;
+            --accent-primary: #ffc985; --accent-secondary: #ff9e78;
+            --book-page-bg: #f3f6f9; --shadow-heavy: rgba(0,0,0,0.3);
         }
         body.light-theme {
             --bg-start: #f0f4f9; --bg-end: #e6eaf3; --bg-aurora: #d4dceb;
@@ -37,13 +33,15 @@
 
         *, *::before, *::after { box-sizing: border-box; }
         body {
-            margin: 0;
-            background: var(--bg-start);
-            font-family: var(--font-ui);
-            color: var(--text-primary);
-            overflow: hidden;
-            height: 100vh;
-        }
+    margin: 0;
+    background: var(--bg-start);
+    font-family: var(--font-ui);
+    color: var(--text-primary);
+    overflow-x: hidden;   /* biar tidak meluber ke samping */
+    overflow-y: auto;     /* aktifkan scroll ke bawah */
+    min-height: 100vh;    /* lebih fleksibel daripada height:100vh */
+}
+
 
         .aurora-bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
@@ -71,7 +69,7 @@
         .book-canvas { flex: 1; display: grid; place-items: center; perspective: 2500px; }
         .book { width: 90%; max-width: 900px; height: 90%; max-height: 640px; position: relative; transition: transform var(--transition-speed) ease; }
         
-       .page {
+        .page {
      position: absolute; width: 50%; height: 100%; top: 0;
      background: var(--book-page-bg); color: var(--text-book);
      border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
@@ -929,7 +927,4 @@
         });
     </script>
 </body>
-
 </html>
-
-
