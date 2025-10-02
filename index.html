@@ -68,20 +68,26 @@
         .book { width: 90%; max-width: 900px; height: 90%; max-height: 640px; position: relative; transition: transform var(--transition-speed) ease; }
         
         .page {
-            position: absolute; width: 50%; height: 100%; top: 0;
-            background: var(--book-page-bg); color: var(--text-book);
-            border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
-            transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
-            overflow: hidden;
-        }
+     position: absolute; width: 50%; height: 100%; top: 0;
+     background: var(--book-page-bg); color: var(--text-book);
+     border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
+     transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
+     /* Hapus 'overflow: hidden' dan tambahkan 'display: flex' */
+     display: flex; 
+ }
         .page-content {
-            padding: 40px;
-            overflow: auto;
-            height: 100%;
-            font-family: var(--font-book);
-            line-height: 1.7;
-            text-align: justify;
-        }
+     padding: 40px;
+     overflow: auto; /* Properti ini tetap ada untuk mengaktifkan scroll */
+     -webkit-overflow-scrolling: touch; /* Menambah performa scroll di iOS */
+
+     /* Ganti 'height: 100%' dengan flexbox */
+     flex: 1;
+     min-height: 0;
+     
+     font-family: var(--font-book);
+     line-height: 1.7;
+     text-align: justify;
+ }
         
         .page-content.cover-page {
             display: flex;
@@ -931,4 +937,5 @@
         });
     </script>
 </body>
+
 </html>
