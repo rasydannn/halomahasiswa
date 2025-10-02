@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruang Baca: Halo, Mahasiswa!</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;700&family=Source+Serif+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --font-ui: 'Sora', sans-serif;
+            --font-book: 'Source Serif Pro', serif;
+            --radius: 16px;
+            --transition-speed: 400ms;
+        }
+
+        /* --- THEME DEFINITIONS --- */
+        body {
+            --bg-start: #0d121c; --bg-end: #101929; --bg-aurora: #1a2742;
+            --panel-bg: rgba(20, 29, 47, 0.5); --panel-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #e1e8f2; --text-secondary: #8a9cb0; --text-book: #1d2b37;
+            --accent-primary: #ffc985; --accent-secondary: #ff9e78;
+            --book-page-bg: #f3f6f9; --shadow-heavy: rgba(0,0,0,0.3);
+        }
+        body.light-theme {
+            --bg-start: #f0f4f9; --bg-end: #e6eaf3; --bg-aurora: #d4dceb;
+            --panel-bg: rgba(255, 255, 255, 0.5); --panel-border: rgba(0, 0, 0, 0.1);
+            --text-primary: #1d2b37; --text-secondary: #5a6b80; --text-book: #1d2b37;
+            --accent-primary: #d98321; --accent-secondary: #e6623c;
+            --book-page-bg: #ffffff; --shadow-heavy: rgba(0,0,0,0.1);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg-start);
+            font-family: var(--font-ui);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .aurora-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+            background: linear-gradient(165deg, var(--bg-start) 0%, var(--bg-end) 100%);
+        }
+        .aurora-bg::after {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 120vw; height: 120vh;
+            background: radial-gradient(circle, var(--bg-aurora) 0%, transparent 50%);
+            transform: translate(-50%, -50%); animation: aurora-breathe 15s infinite ease-in-out;
+        }
+        @keyframes aurora-breathe { 0%, 100% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.8; } 50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; } }
+
+        .app-container { display: grid; grid-template-columns: 1fr 380px; gap: 24px; padding: 24px; height: 100%; }
+
+        .book-viewer {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0; /* PERBAIKAN BUG UTAMA */
+        }
+        .viewer-header { display: flex; justify-content: space-between; align-items: center; }
+        .viewer-header h1 { margin: 0; font-size: 20px; }
+        .viewer-header p { margin: 4px 0 0 0; color: var(--text-secondary); font-size: 14px; }
+        
+        .book-canvas { flex: 1; display: grid; place-items: center; perspective: 2500px; }
+        .book { width: 90%; max-width: 900px; height: 90%; max-height: 640px; position: relative; transition: transform var(--transition-speed) ease; }
+        
+        .page {
+            position: absolute; width: 50%; height: 100%; top: 0;
+            background: var(--book-page-bg); color: var(--text-book);
+            border-radius: var(--radius); box-shadow: 0 10px 40px var(--shadow-heavy);
+            transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1), box-shadow 0.5s;
+            overflow: hidden;
+        }
+        .page-content {
+            padding: 40px;
+            overflow: auto;
+            height: 100%;
+            font-family: var(--font-book);
+            line-height: 1.7;
+            text-align: justify;
+        }
+        
+        .page-content.cover-page {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .page-content .meta { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; font-family: var(--font-ui); text-align: left; }
+        .page-content .title { font-size: 24px; margin: 8px 0 16px 0; font-weight: 600; text-align: left;}
+        .page-content p { margin-bottom: 1em; }
+        
+        .page.left { left: 0; transform-origin: right; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .page.right { right: 0; transform-origin: left; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .page.flipped { transform: rotateY(180deg); box-shadow: 0 5px 20px var(--shadow-heavy); z-index: 10; }
+        .page.flipped.left { transform: rotateY(-180deg); }
+
+        .book[data-layout="single"] .page.left { display: none; }
+        .book[data-layout="single"] .page.right { width: 100%; }
+
+        .viewer-controls { display: flex; justify-content: center; align-items: center; gap: 12px; }
+        .btn { background: none; border: 1px solid var(--panel-border); color: var(--text-secondary); padding: 10px 16px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .btn:hover { background: var(--panel-border); color: var(--text-primary); }
+        .btn svg { width: 16px; height: 16px; }
+
+        .dashboard {
+            background: var(--panel-bg); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+            border: 1px solid var(--panel-border); border-radius: var(--radius);
+            padding: 20px; display: flex; flex-direction: column;
+            min-height: 0; /* PERBAIKAN BUG UTAMA */
+        }
+        .tab-buttons { display: flex; gap: 8px; border-bottom: 1px solid var(--panel-border); margin-bottom: 16px; }
+        .tab-btn { padding: 12px 16px; cursor: pointer; color: var(--text-secondary); position: relative; border: none; background: none; font-size: 14px; font-weight: bold; font-family: var(--font-ui); }
+        .tab-btn.active { color: var(--text-primary); }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--accent-primary); }
+        
+        .tab-content { display: none; flex: 1; flex-direction: column; gap: 16px; min-height: 0; }
+        .tab-content.active { display: flex; }
+        
+        #toc-list {
+            overflow: auto;
+            flex: 1;
+        }
+        .toc-item { padding: 12px; border-radius: 10px; cursor: pointer; transition: background-color 0.2s; }
+        .toc-item:hover { background: rgba(255,255,255,0.05); }
+        .toc-item.active { background: linear-gradient(90deg, rgba(255, 201, 133, 0.1), transparent); }
+        .toc-item strong { display: block; }
+        .toc-item span { font-size: 13px; color: var(--text-secondary); }
+        #toc-search { width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: 8px; }
+
+        #note-list { flex: 1; overflow: auto; }
+        .note-item { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; margin-bottom: 10px; }
+        .note-item .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+        #note-input { width: 100%; height: 120px; background: rgba(0,0,0,0.2); border: 1px solid var(--panel-border); color: var(--text-primary); border-radius: 8px; padding: 10px; resize: none; }
+
+        .setting { display: flex; justify-content: space-between; align-items: center; }
+        .setting label { font-weight: bold; }
+        .setting-group { display: flex; gap: 8px; }
+        .setting-btn { background: rgba(0,0,0,0.2); border: 1px solid var(--panel-border); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+        .setting-btn.active { background: var(--accent-primary); color: #000; border-color: var(--accent-primary); }
+
+        @media (max-width: 1200px) {
+            .app-container { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+            .dashboard { max-height: 40vh; }
+        }
+
+        /* --- MOBILE UI --- */
+        .mobile-ui { 
+            display: none; 
+        }
+
+        @media (max-width: 768px) {
+            .app-container { 
+                display: flex; 
+                flex-direction: column; 
+                padding: 16px; 
+                padding-bottom: 80px; /* Memberi ruang untuk toolbar bawah */ 
+            }
+            .dashboard { 
+                display: none; /* Sembunyikan dashboard desktop */ 
+            } 
+            .viewer-controls { 
+                display: none; /* Sembunyikan kontrol desktop */ 
+            }
+            
+            .book { 
+                width: 100%; 
+                height: 100%; 
+                max-height: none; 
+            }
+            .page-content { 
+                padding: 24px; 
+            }
+            .page-content .title { 
+                font-size: 20px; 
+            }
+            
+            .mobile-ui { display: none; }
+        /* --- GANTI SELURUH BLOK @media LAMA ANDA DENGAN YANG INI --- */
+        @media (max-width: 768px) {
+            .app-container { 
+                display: flex; 
+                flex-direction: column; 
+                padding: 16px; 
+                padding-bottom: 80px; /* Memberi ruang untuk toolbar bawah */ 
+            }
+            .dashboard, .viewer-controls { 
+                display: none; /* Sembunyikan elemen desktop */ 
+            }
+            
+            .book { 
+                position: relative; /* Reset untuk mobile */
+                width: 100%; 
+                height: 100%; 
+                max-height: none; 
+            }
+
+            .page {
+                /* Ini adalah perbaikan paling krusial */
+                position: relative !important; /* Paksa posisi menjadi normal */
+                width: 100% !important;      /* Paksa lebar menjadi penuh */
+                height: 100% !important;
+                display: block;
+                left: auto;
+                right: auto;
+                border-radius: var(--radius);
+                transform: none !important; /* Hapus semua efek 3D di mobile */
+            }
+
+            .page-content { padding: 24px; }
+            .page-content .title { font-size: 20px; }
+            
+            .mobile-ui { display: block; }
+            .mobile-toolbar {
+                position: fixed; bottom: 0; left: 0; width: 100%;
+                background: var(--panel-bg); 
+                backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+                border-top: 1px solid var(--panel-border);
+                display: flex; justify-content: space-around; align-items: center;
+                padding: 8px 0; z-index: 1001;
+            }
+            .mobile-toolbar .btn { 
+                flex-direction: column; font-size: 12px; padding: 6px; gap: 4px;
+            }
+            
+            .mobile-panel {
+                position: fixed; bottom: 0; left: 0; width: 100%;
+                height: 70vh; background: var(--bg-end);
+                transform: translateY(100%);
+                transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                z-index: 1000;
+                border-top-left-radius: var(--radius);
+                border-top-right-radius: var(--radius);
+                padding: 20px; display: flex; flex-direction: column;
+            }
+            .mobile-panel.active { transform: translateY(0); }
+            .mobile-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-shrink: 0; }
+            .mobile-panel-header h2 { margin: 0; font-size: 18px; color: var(--text-primary); }
+            .mobile-panel-content { flex: 1; min-height: 0; overflow-y: auto; }
+            .layout-setting { display: none; }
+        }
+        }
+    </style>
+</head>
+<body class="light-theme">
+
+    <div class="aurora-bg"></div>
+
+    <div class="app-container">
+        <main class="book-viewer">
+            <div class="viewer-header">
+                <div>
+                    <h1 id="book-title">Halo, Mahasiswa!</h1>
+                    <p id="current-chapter-title">Bab 1 - Gen Z</p>
+                </div>
+            </div>
+
+            <div class="book-canvas">
+                <div class="book" id="book" data-layout="double">
+                    <div class="page left" id="page-left">
+                        <div class="page-content" id="left-content"></div>
+                    </div>
+                    <div class="page right" id="page-right">
+                        <div class="page-content" id="right-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="viewer-controls">
+                <button class="btn" id="prev-btn">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    Sebelumnya
+                </button>
+                <div id="page-indicator" style="color: var(--text-secondary); min-width: 60px; text-align: center;">1 / 13</div>
+                <button class="btn" id="next-btn">
+                    Selanjutnya
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+            </div>
+        </main>
+
+        <aside class="dashboard">
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="tab-toc">Daftar Isi</button>
+                <button class="tab-btn" data-tab="tab-notes">Catatan</button>
+                <button class="tab-btn" data-tab="tab-settings">Pengaturan</button>
+            </div>
+
+            <div id="tab-toc" class="tab-content active">
+                <input type="search" id="toc-search" placeholder="Cari bab...">
+                <div id="toc-list"></div>
+            </div>
+
+            <div id="tab-notes" class="tab-content">
+                <h3 style="margin:0" id="notes-title">Catatan untuk Bab 1</h3>
+                <div id="note-list"></div>
+                <textarea id="note-input" placeholder="Tulis catatanmu di sini..."></textarea>
+                <button class="btn" id="save-note" style="align-self: flex-end;">Simpan Catatan</button>
+            </div>
+            
+            <div id="tab-settings" class="tab-content">
+                <div class="setting">
+                    <label>Ukuran Font</label>
+                    <div class="setting-group">
+                        <button class="setting-btn" data-action="font-decrease">A-</button>
+                        <button class="setting-btn active" data-action="font-reset">Normal</button>
+                        <button class="setting-btn" data-action="font-increase">A+</button>
+                    </div>
+                </div>
+                 <div class="setting">
+                    <label>Mode Baca</label>
+                    <div class="setting-group">
+                        <button class="setting-btn" data-action="layout-single">Satu Halaman</button>
+                        <button class="setting-btn active" data-action="layout-double">Dua Halaman</button>
+                    </div>
+                </div>
+                 <div class="setting">
+                    <label>Tema</label>
+                    <div class="setting-group">
+                        <button class="setting-btn active" data-action="theme-light">Fajar</button>
+                        <button class="setting-btn" data-action="theme-dark">Senja</button>
+                    </div>
+                </div>
+                 <div class="setting">
+                    <label>Ekspor</label>
+                    <div class="setting-group">
+                        <button class="btn" id="download-chapter">Unduh Bab Ini (.txt)</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <div class="mobile-ui">
+        <div class="mobile-toolbar"><button class="btn" id="mobile-prev-btn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button><button class="btn" data-panel="toc">Daftar Isi</button><button class="btn" data-panel="notes">Catatan</button><button class="btn" data-panel="settings">Atur</button><button class="btn" id="mobile-next-btn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button></div>
+        <div class="mobile-panel" id="mobile-panel"><div class="mobile-panel-header"><h2 id="mobile-panel-title">Daftar Isi</h2><button class="btn" id="close-panel-btn">Tutup</button></div><div class="mobile-panel-content" id="mobile-panel-content"></div></div>
+    </div>
+
+    <script>
+        const chapters = [
+            {id: 0, title: '', meta: '', content: `<div style="text-align:center; padding-top:30px;"><h1>HALO, MAHASISWA!</h1><p>Sebuah Kritik dan Harapan</p><h3>oleh Riyadh Rasydan</h3></div>`},
+            {id: 1, title: 'Gen Z', meta: 'Bab 1', content: 
+            `Setiap generasi lahir dengan ceritanya sendiri. Mereka tidak pernah memilih di zaman apa mereka dilahirkan, tetapi zaman itulah yang membentuk mereka. Gen Z lahir setelah jejak perang besar memudar. Mereka tidak merasakan hancurnya ekonomi akibat bom atau konflik bersenjata global. Mereka juga tidak pernah benar-benar mengalami dunia tanpa internet. Sejak kecil, mereka sudah akrab dengan layar ponsel, musik digital, dan media sosial. Dunia yang keras dengan disiplin mutlak seperti yang dialami Baby Boomers dan Generasi X terasa begitu jauh dari kehidupan mereka. Generasi sebelum Z tumbuh dengan didikan keras, karena memang kerasnya dunia saat itu menuntut ketahanan mental dan fisik. Sementara Millennial masih sempat merasakan transisi: dari didikan tradisional yang kaku menuju dunia modern yang lebih cair. Gen Z berada di ujung jembatan itu. Mereka tidak sepenuhnya dibesarkan dengan kekerasan zaman lama, tetapi juga tidak sepenuhnya bebas dari nilai-nilai tradisi. Mereka berada di persimpangan.
+            
+            Generasi Z, atau yang sering disebut Gen Z, adalah salah satunya. Mereka tumbuh di dunia yang sudah jauh berbeda dari generasi sebelumnya, di tengah arus teknologi yang tak terbendung, globalisasi yang menyatukan batas-batas, serta sistem nilai yang perlahan bergeser
+            
+            Kehidupan sehari-hari Gen Z sarat dengan hal yang sebelumnya dianggap mewah. Informasi mengalir deras ke genggaman mereka. Belajar tidak lagi terbatas pada guru di kelas, tetapi bisa dari ribuan sumber online. Mereka bisa bercakap dengan orang di benua lain hanya dengan sekali klik. Mereka bisa menyerap nilai budaya lintas negara tanpa harus pergi jauh. Semua itu membuat mereka terbiasa berpikir luas, lebih kritis, dan lebih cepat beradaptasi. Bagi mereka, tradisi bukanlah hukum mutlak, melainkan sesuatu yang bisa dipilih: diikuti bila relevan, ditinggalkan bila membelenggu. Inilah yang sering menimbulkan gesekan dengan generasi sebelumnya.
+
+            Tidak sedikit yang menyebut Gen Z sebagai generasi rapuh, manja, bahkan mudah tersinggung. Istilah “strawberry generation” begitu lekat: indah di luar, mudah hancur di dalam. Namun apakah itu benar adanya? Memang betul, Gen Z lebih ekspresif soal perasaan. Mereka tidak sungkan membicarakan kesehatan mental, mengungkapkan rasa lelah, bahkan menolak tekanan yang tidak manusiawi. Bagi sebagian orang tua atau lingkungan kerja lama, sikap ini terlihat sebagai kelemahan. Padahal, di balik ekspresi itu, Gen Z justru menyimpan daya tahan lain. Banyak di antara mereka yang menjadi tulang punggung keluarga sejak muda, bekerja sambil kuliah, atau membangun usaha kecil-kecilan demi bertahan hidup. Mereka menghadapi tekanan akademik yang semakin tinggi, biaya hidup yang tidak murah, dan standar sosial yang terus meninggi akibat paparan media. Mereka menangis dalam kesendirian, tetapi tetap melangkah. Mereka terlihat rapuh, padahal diam-diam tangguh. Sensitivitas mereka bukan kelemahan, melainkan cara baru menghadapi dunia: lebih sadar, lebih peka, lebih manusiawi.
+
+            Gesekan paling jelas antara Gen Z dan lingkungannya tampak di bidang pendidikan dan pekerjaan. Sekolah masih berkutat dengan metode hafalan, disiplin kaku, dan aturan tanpa alasan yang jelas. Padahal Gen Z tumbuh di era informasi cepat. Mereka tidak puas hanya menghafal, mereka ingin memahami, mencoba, bereksperimen. Mereka menginginkan ruang untuk bertanya, bukan sekadar mengulang jawaban. Begitu pula di dunia kerja. Proses rekrutmen yang sarat formalitas—wawancara penuh basa-basi, penilaian berdasarkan penampilan atau cara bicara—sering mereka anggap membuang waktu. Mereka lebih percaya pada portofolio nyata, keterampilan yang terukur, dan hasil kerja yang bisa dilihat. Tidak heran jika banyak dari mereka memilih jalannya sendiri: bekerja sebagai freelancer, membangun startup, atau bergabung dengan komunitas global yang tidak terlalu peduli pada hierarki kaku. Mereka tidak malas, tetapi mereka menolak cara lama yang dianggap tidak efisien.
+
+            Ciri khas lain Gen Z adalah sensitivitas mereka. Mereka lebih cepat bereaksi ketika melihat ketidakadilan. Mereka lebih mudah terguncang oleh kritik yang kasar. Generasi lama menilai ini tanda kelemahan. Tetapi justru di balik kepekaan itu, ada empati. Gen Z lebih peduli pada isu-isu kemanusiaan, kesetaraan gender, perubahan iklim, dan kesehatan mental. Mereka lebih berani bersuara ketika ada diskriminasi, lebih peka terhadap penderitaan orang lain, bahkan di belahan dunia yang jauh. Semua ini tidak lepas dari dunia digital yang membuat mereka merasa terhubung secara global. Jika satu tragedi terjadi di suatu negara, Gen Z di belahan dunia lain bisa ikut merasakannya, karena media sosial membawa kisah itu langsung ke layar mereka. Empati lintas batas inilah yang membuat Gen Z istimewa, meski sering disalahpahami.
+
+            Masalahnya, lingkungan sering gagal membaca tanda zaman. Pola asuh yang keras masih dipaksakan, seolah anak harus ditempa seperti besi agar kuat. Pendidikan masih dijalankan seperti pabrik, memproduksi murid seragam tanpa ruang kreativitas. Dunia kerja masih memelihara hierarki yang kaku, lebih menghargai kepatuhan daripada inovasi. Padahal zaman telah berubah. Seperti kata Ali bin Abi Thalib, “Didiklah anakmu sesuai zamannya, karena mereka hidup bukan di zamanmu.” Gen Z hidup di zaman yang berbeda, dengan tantangan yang berbeda. Menuntut mereka untuk mengikuti cara lama hanya akan melahirkan jurang pemisah.
+
+            Dalam sepuluh atau dua puluh tahun ke depan, Gen Z akan mengambil alih panggung utama. Mereka akan menjadi pemimpin, pembuat kebijakan, pengusaha, atau pendidik. Dunia akan bergerak sesuai cara mereka berpikir. Lingkungan yang tidak mau berubah akan tertinggal. Karena itu, adaptasi harus dilakukan sejak sekarang: pendidikan yang lebih fleksibel dan relevan, dunia kerja yang lebih menghargai keterampilan nyata, pola asuh yang lebih empatik dan terbuka.
+
+            Namun cerita ini tidak berhenti di Gen Z. Mereka hanyalah awal dari perjalanan. Setelah mereka, akan lahir generasi Alpha dan Beta—anak-anak yang sejak lahir sudah dikelilingi kecerdasan buatan, realitas virtual, dan teknologi canggih yang kini bahkan masih kita anggap baru. Jika Gen Z sudah dianggap terlalu cair dan kritis, Alpha dan Beta akan jauh lebih ekstrem. Mereka tidak akan mengenal dunia tanpa internet, bahkan mungkin tanpa kecerdasan buatan. Mereka akan tumbuh dengan pola pikir yang lebih global, lebih instan, dan lebih sulit dibatasi oleh aturan tradisional.
+
+            Gen Z, dalam hal ini, adalah peringatan sekaligus jembatan. Jika lingkungan gagal memahami Gen Z hari ini, kesenjangan dengan Alpha dan Beta nanti akan jauh lebih besar. Sebaliknya, jika lingkungan mulai belajar beradaptasi sejak sekarang, dunia akan lebih siap menyambut generasi baru yang lahir dengan bahasa, ritme, dan cara pandang yang berbeda. Pada akhirnya, setiap generasi adalah anak zamannya. Tidak ada yang benar-benar lemah atau kuat, hanya berbeda cara menghadapi tantangan. Dunia tidak berhenti berputar, dan generasi baru akan terus lahir membawa cerita yang segar. Gen Z hanyalah salah satunya, generasi yang sering disalahpahami, tetapi sejatinya sedang menunjukkan pada dunia bahwa ada cara lain untuk bertahan: dengan empati, dengan kreativitas, dan dengan keberanian untuk berbeda. 
+`},
+            {id: 2, title: 'Kritis', meta: 'Bab 2', content: 
+            `Kritis adalah salah satu kemampuan yang sering diagung-agungkan di dunia modern. Di tengah derasnya arus informasi, orang yang mampu mempertanyakan, menyaring, dan menganalisis sesuatu tentu memiliki nilai lebih. Namun, di balik nilai positifnya, sikap kritis juga punya sisi lain yang kadang menimbulkan gesekan. Hal ini terutama terasa di lingkungan Gen Z, generasi yang tumbuh dengan kebebasan berpendapat sekaligus kerentanan emosional.
+            
+            Di ruang kelas, baik sekolah maupun kampus, kita sering menemukan fenomena yang menarik. Mahasiswa atau siswa yang kritis biasanya lebih aktif bertanya saat presentasi. Mereka tidak ragu melontarkan pertanyaan yang menyinggung detail materi, bahkan kadang menantang argumen yang disampaikan oleh teman sekelas. Dari satu sisi, ini menunjukkan keberanian. Di sisi lain, seringkali cara bertanya yang digunakan terdengar kaku, dingin, bahkan seperti berniat menjatuhkan. Alhasil, presentasi yang seharusnya jadi ruang belajar bersama berubah menjadi ajang uji nyali.
+
+            Ada alasan kenapa hal ini bisa terjadi. Pertama, tidak mungkin setiap siswa atau mahasiswa menguasai seluruh materi presentasi secara mendalam. Waktu yang terbatas, beban tugas lain, dan keterbatasan sumber membuat mereka hanya memahami sebagian besar pokoknya saja. Saat pertanyaan yang dilontarkan terlalu teknis atau terlalu “filosofis”, mereka tentu kesulitan menjawab. Seharusnya di titik itu, penanya bisa memberi kelonggaran dan membiarkan guru atau dosen yang meluruskan. Namun sering kali, penanya justru bersikeras menuntut jawaban dari si penyaji. Akibatnya, audiens merasa bukan sedang menyaksikan diskusi ilmiah, melainkan sebuah interogasi.
+
+            Kedua, cara bertanya sering kali memperkeruh keadaan. Nada bicara yang sedikit meninggi, raut wajah dingin, atau pilihan kata yang keras membuat pertanyaan terdengar seperti tuduhan. Padahal, konten pertanyaannya mungkin bagus dan bernilai. Tetapi karena disampaikan dengan bahasa tubuh yang tidak ramah, penerimanya merasa ditekan. Apalagi Gen Z terkenal mudah tersinggung. Hal kecil yang menurut generasi sebelumnya sepele, bisa dianggap serius oleh mereka. Pertanyaan yang disampaikan tanpa senyum, tanpa sapaan, atau dengan nada sedikit menantang, langsung dibaca sebagai bentuk permusuhan.
+
+            Fenomena ini membuat Gen Z sering dianggap mudah panas. Mereka cenderung membalas tekanan dengan tekanan, bukan dengan ketenangan. Jika mereka merasa dipermalukan, mereka menjawab dengan nada kesal. Jika merasa dituntut, mereka menutup diri. Akibatnya, diskusi yang seharusnya membuka wawasan justru berakhir dengan ketegangan.
+
+            Namun sebenarnya, masalah ini bukan semata pada Gen Z sebagai pribadi, melainkan pada cara mereka berlatih komunikasi. Mereka tumbuh di era digital, di mana komunikasi sering berlangsung lewat layar. Di media sosial, orang terbiasa berkomentar tajam tanpa memikirkan ekspresi wajah atau nada suara. Teks yang datar bisa terbaca sinis. Emoji atau tanda baca menjadi pengganti ekspresi, tapi itu tidak selalu berhasil. Kebiasaan ini terbawa ke dunia nyata. Saat bertanya atau berargumen di ruang fisik, mereka sering lupa bahwa komunikasi tatap muka membutuhkan kelembutan: senyum, intonasi, dan bahasa tubuh.
+
+            Padahal, menjadi kritis bukan sekadar soal isi pertanyaan. Ada seni di dalamnya. Seni bertanya, seni mengemas kritik, seni memilih kata yang tepat agar lawan bicara tidak merasa dijatuhkan. Seorang penanya yang kritis tapi santun justru akan lebih didengar. Mereka yang ditanya tidak merasa malu jika tidak bisa menjawab, karena sejak awal pertanyaan itu tidak dirasakan sebagai tuntutan. Bahkan, audiens pun lebih menikmati proses diskusi, karena tidak ada yang merasa digiring ke sudut.
+
+            Pengalaman sederhana menunjukkan hal ini. Ketika seseorang bertanya dengan senyum, dengan nada ringan, dan menyisipkan kata-kata yang menunjukkan penghargaan, suasana kelas berubah. Pertanyaan tetap kritis, tetapi terasa mengajak, bukan mengadili. Yang sedang presentasi lebih maksimal dalam menjawab karena merasa aman. Jika mereka tidak tahu, tidak ada rasa malu yang berlebihan, karena semua tahu bahwa itu bagian dari proses belajar. Inilah seni kritis yang jarang dilatih, padahal sangat menentukan.
+
+            Sayangnya, banyak siswa maupun mahasiswa yang belum memahami hal itu. Mereka mengira semakin tajam pertanyaan, semakin terlihat pintar. Padahal, tajam tanpa empati hanya akan melahirkan jarak. Menjadi kritis tanpa memperhatikan suasana sama saja seperti menaburkan benih di tanah kering: tidak akan tumbuh dengan baik.
+
+            Di sini kita bisa melihat bahwa Gen Z sesungguhnya pintar, tetapi gampang terbawa emosi. Mereka punya kemampuan berpikir cepat, punya banyak pertanyaan, bahkan sering punya keberanian yang tidak dimiliki generasi sebelumnya. Namun mereka juga perlu belajar mengendalikan cara mereka menyampaikan pikiran. Dunia modern memang membutuhkan orang yang kritis, tapi dunia juga membutuhkan orang yang bisa menjaga keharmonisan dalam diskusi.
+
+            Jika fenomena “kritis tapi panas” ini terus dibiarkan, Gen Z akan kesulitan membangun dialog yang sehat. Mereka bisa terjebak dalam pola adu argumen yang hanya melahirkan luka, bukan solusi. Namun saya percaya, seiring bertambahnya pengalaman, mereka bisa belajar. Setiap kali mengalami konflik kecil di kelas, di organisasi, atau di dunia kerja, mereka akan mulai menyadari bahwa cara menyampaikan itu sama pentingnya dengan isi yang disampaikan. Mungkin awalnya mereka tersinggung, merasa diserang, atau ingin membalas. Tetapi perlahan, mereka akan mengerti bahwa ketenangan lebih berharga daripada kemenangan sesaat.
+
+            Menjadi kritis adalah anugerah, tetapi anugerah itu hanya akan bersinar jika dipadukan dengan kebijaksanaan. Bagi Gen Z, inilah tantangan terbesar mereka: bagaimana caranya menjadikan kritik sebagai jembatan, bukan pedang; menjadikan pertanyaan sebagai undangan berpikir bersama, bukan sekadar uji coba untuk menjatuhkan. Jika tantangan ini bisa dilewati, Gen Z akan dikenal bukan hanya sebagai generasi yang pintar dan kritis, tetapi juga sebagai generasi yang mampu mengubah perbedaan pandangan menjadi ruang tumbuh bersama. 
+`},
+
+            {id: 3, title: 'Dosen, Mahasiswa, dan Kedewasaan', meta: 'Bab 3', content: `
+            Setiap tahun ajaran baru, wajah-wajah segar mahasiswa baru datang silih berganti. Mereka menapaki dunia kampus dengan seribu macam harapan—ada yang ingin meraih cita-cita, ada yang sekadar ingin lulus cepat, ada pula yang hanya mengikuti arus kehidupan tanpa tahu ke mana tujuan sebenarnya. Perubahan status dari siswa menjadi mahasiswa sering dipandang sebagai lompatan besar, seolah begitu seseorang memasuki gerbang universitas, ia sudah resmi menjadi dewasa. Setiap dosen yang masuk ke ruang kelas mahasiswa baru hampir selalu memulai dengan kalimat yang sama: “Kalian sekarang sudah mahasiswa, kalian sudah dewasa, seharusnya begini, begini, dan begini.” Namun, kalimat itu sering kali hanya menjadi ilusi yang dipaksakan. Ilusi bahwa menjadi mahasiswa otomatis berarti sudah dewasa, padahal realitasnya jauh lebih kompleks daripada sekadar perubahan status.
+
+            Tidak semua orang yang memasuki bangku kuliah siap secara mental untuk disebut dewasa. Ada yang baru saja lulus SMA, terbiasa diantar-jemput orang tua, terbiasa dengan guru yang selalu mengingatkan jadwal ulangan, bahkan terbiasa dengan pola pikir bahwa nilai lebih penting daripada proses. Tiba-tiba, semua itu berubah. Mereka harus hidup jauh dari orang tua, mengatur waktu sendiri, mengelola uang bulanan, dan menghadapi kebebasan yang sering kali lebih besar daripada kemampuan mereka untuk mengendalikan diri. Faktor lingkungan juga sangat berpengaruh. Cara asuh keluarga berbeda-beda: ada yang dididik untuk mandiri sejak kecil, ada pula yang selalu disuapi solusi oleh orang tuanya. Lingkungan sekolah pun tidak sama: ada sekolah yang mendorong diskusi, ada pula yang menekankan kepatuhan. Bahkan kondisi masyarakat tempat mereka tumbuh bisa membentuk pola pikir yang jauh dari ideal “kedewasaan”. Oleh karena itu, kedewasaan tidak bisa sekadar ditetapkan lewat status mahasiswa. Ia adalah proses panjang yang dipengaruhi banyak hal: keluarga, pendidikan, pertemanan, bahkan pengalaman jatuh-bangun dalam hidup. Mahasiswa baru yang tingkahnya masih seperti anak SMA bukanlah aib; itu adalah kenyataan yang seharusnya dipahami, bukan dicela.
+
+            Sayangnya, banyak dosen memilih jalan pintas dengan menyebut mahasiswa dewasa sejak hari pertama kuliah. Dari situlah lahir dalih bahwa mahasiswa harus belajar mandiri, harus bisa mengatur diri, harus tidak bergantung lagi pada siapa pun. Sekilas terdengar bagus, bahkan logis. Namun, ketika diperhatikan lebih dalam, sering kali “kemandirian” itu hanyalah kedok bagi dosen untuk melepas tanggung jawab. Berapa banyak kelas yang dari awal semester hingga akhir hanya diisi dengan presentasi mahasiswa? Dosen berdiri di depan, lalu berkata, “Silakan minggu depan kelompok satu presentasi bab ini.” Minggu berikutnya kelompok dua, lalu kelompok tiga, dan seterusnya. Dosen hanya memberi komentar singkat, terkadang bahkan sekadar hadir secara fisik tanpa benar-benar mengajar. Semua itu dibungkus dengan kalimat manis: “Ini untuk melatih public speaking kalian, ini untuk melatih critical thinking kalian.” Padahal kenyataannya, mayoritas mahasiswa justru bosan dengan presentasi. Tanyakan pada siapa pun, hampir semua akan menjawab hal yang sama: presentasi adalah momok paling membosankan di dunia perkuliahan. Mengapa? Karena isinya sering hanya formalitas. Slide demi slide dibacakan, audiens tidak mendengarkan, dosen tidak benar-benar menanggapi, lalu selesai. Tidak ada ilmu baru yang diperoleh, hanya kelelahan dan waktu yang terbuang. Lalu ketika mahasiswa mengeluh, jawaban dosen selalu sama: “Kalian ini harus dewasa, harus mandiri. Jangan manja, ini demi masa depan kalian sendiri.” Sebuah kalimat yang terdengar bijak, tapi sering kali hanya dipakai untuk menutupi kemalasan.
+
+            Mahasiswa tetaplah manusia muda yang sedang bertumbuh. Mereka bukan mesin pencetak tugas, bukan pula robot yang bisa langsung beradaptasi dengan sistem apa pun. Mereka masih butuh bimbingan, butuh pendampingan, butuh figur yang bisa diteladani. Mahasiswa sadar bahwa mereka harus belajar dewasa. Mereka sadar bahwa dunia kampus menuntut tanggung jawab yang lebih besar. Namun, apakah itu berarti mereka tidak boleh mendapat arahan lagi? Apakah itu berarti dosen bisa sepenuhnya lepas tangan? Apakah dewasa berarti harus selalu kuat, selalu tegar, tanpa pernah menunjukkan kelemahan? Mahasiswa pun punya hati yang rapuh. Ada yang masih kesulitan beradaptasi dengan lingkungan baru, ada yang kesepian karena belum mendapat teman yang benar-benar bisa dipercaya, ada yang terbebani masalah keluarga di kampung halaman. Di titik-titik rapuh itu, seharusnya dosen bisa hadir setidaknya sebagai tempat kembali, walaupun bukan lagi berperan sebagai guru yang terus-menerus mengarahkan. Tetapi, banyak dosen memilih untuk tetap bersembunyi di balik kata “dewasa”.
+
+            Di banyak kampus, dosen wali hanya hadir dalam momen formalitas: ketika KRS atau ketika UAS. Bahkan ada dosen wali yang tidak pernah benar-benar mengenal mahasiswanya. Yang mereka pedulikan hanyalah daftar hadir, nilai, dan administrasi pembayaran. Mahasiswa pun merasa bahwa dosen hanya peduli jika ada masalah keuangan atau kelulusan yang terhambat. Lalu apa arti keberadaan dosen bagi mahasiswa? Jika mereka hanya hadir untuk mengoreksi jawaban ujian atau memberi tanda tangan KRS, maka peran itu bisa digantikan oleh sistem digital. Apa yang membedakan dosen dengan mesin jika tidak ada interaksi manusiawi di dalamnya? Mahasiswa membayar uang kuliah yang tidak sedikit. Mereka berharap mendapat pengalaman belajar yang berharga, bukan sekadar mendengarkan celoteh dosen di depan kelas atau menjadi pekerja presentasi setiap minggu. Mereka berharap dosen hadir bukan hanya untuk menuntut, tetapi juga untuk memberi.
+
+            Selain presentasi, masalah klasik lain adalah tugas. Dosen sering memberi tugas setinggi langit dengan dalih bahwa mahasiswa harus terbiasa dengan beban berat. Namun, jarang sekali dosen benar-benar mempertimbangkan apakah tugas itu bermakna. Banyak tugas hanya berakhir sebagai tumpukan file PDF di komputer dosen yang tidak pernah dibaca serius. Mahasiswa bukanlah mesin. Mereka punya keterbatasan waktu, tenaga, bahkan pikiran. Ketika dosen memberi terlalu banyak tugas tanpa memberi arahan yang jelas, mahasiswa hanya akan mengerjakan seadanya. Alih-alih melatih kemampuan berpikir kritis, tugas yang menumpuk justru melahirkan budaya copy-paste. Dan lagi-lagi, ketika mahasiswa mengeluh, jawaban dosen hampir selalu sama: “Kalian ini mahasiswa, sudah dewasa, harus bisa mengatur waktu, harus bisa mandiri.” Kata-kata yang sama, mantra yang terus diulang-ulang, seolah menjadi tameng untuk menutupi kelemahan sistem pengajaran.
+
+            Sebenarnya, tidak ada yang salah dengan dorongan agar mahasiswa belajar mandiri. Itu memang bagian dari proses kedewasaan. Namun yang salah adalah ketika kemandirian dijadikan alasan untuk membiarkan mahasiswa berjalan sendirian tanpa arah. Kedewasaan bukan berarti tidak butuh bimbingan. Justru orang yang dewasa tahu kapan harus meminta bantuan, tahu kapan harus mencari arahan. Dosen seharusnya tidak menghilang dengan alasan bahwa mahasiswa harus belajar mandiri, tetapi hadir sebagai pendamping yang memberi arahan secukupnya, lalu membiarkan mahasiswa mengeksplorasi sendiri. Mahasiswa adalah manusia, bukan mesin pencetak nilai. Mereka punya kerentanan, punya kebingungan, punya perjalanan panjang untuk menemukan jati diri. Jika kampus hanya mengandalkan kata “dewasa” sebagai alasan untuk melepas mereka, maka kampus hanya akan menghasilkan lulusan yang pandai bertahan hidup, tetapi miskin pengalaman bermakna.
+
+            Banyak mahasiswa menyimpan kekecewaan pada sistem pendidikan tinggi. Mereka merasa dosen hanya hadir untuk menggugurkan kewajiban administratif, sementara esensi pembelajaran hilang entah ke mana. Mereka merasa kata “dewasa” hanya dipakai untuk menekan, bukan untuk membimbing. Namun, meski demikian, mahasiswa tetaplah berjuang. Mereka mencari jalannya sendiri: lewat organisasi, lewat komunitas, lewat sahabat yang mereka temui di kampus. Mereka` 
+        },
+
+        {id: 4, title: 'Perkuliahan', meta: 'Bab 4', content: `
+        Perkuliahan di Indonesia bagi sebagian besar mahasiswa terasa seperti sebuah penjara berbayar. Bayangkan saja, mahasiswa harus merogoh kocek yang tidak sedikit hanya untuk duduk di kelas, mendengar dosen yang terkadang bahkan tidak lebih menarik dari suara jam dinding. Harapannya, kuliah akan memberikan wawasan, pengalaman, dan bekal nyata untuk masa depan. Namun, kenyataan di lapangan seringkali berbalik seratus delapan puluh derajat. Dosen yang hadir di kelas tidak jarang hanya sekadar formalitas. Mereka datang, menyalakan proyektor, membuka slide presentasi yang sama setiap tahun, dan membiarkan mahasiswa bertarung sendiri dengan materi yang tak jarang sulit dicerna. Yang lebih menyedihkan, beberapa dosen bahkan merasa sudah cukup hanya dengan memberikan tugas menumpuk sebagai bukti bahwa mereka sedang “mengajar”. Padahal, mahasiswa jelas bukan mesin pengolah tugas. Mahasiswa datang dengan harapan mendapat bimbingan, bukan sekadar menjadi objek percobaan sistem pendidikan yang setengah hati.
+
+        Di satu sisi, mahasiswa sadar bahwa perkuliahan memang menuntut kemandirian. Tidak ada lagi yang memegang tangan seperti masa sekolah, tidak ada guru yang setiap hari memastikan anak didiknya paham. Tapi apakah itu berarti dosen boleh sepenuhnya melepaskan tanggung jawabnya? Jika dosen hanya hadir sebagai figur simbolis yang sekadar menggugurkan kewajiban, bukankah itu sama saja dengan memenjarakan mahasiswa dalam ruang kelas, memaksa mereka mengikuti aturan, sambil tetap menguras biaya yang tidak sedikit? Mahasiswa berada dalam posisi aneh: mereka harus membayar mahal untuk mendapatkan sesuatu yang seharusnya bernilai, tetapi sering kali hanya pulang dengan kepala pening dan hati kesal.
+
+        Selain sistem kelas yang membingungkan, dunia pertemanan di perkuliahan pun terasa jauh berbeda dari masa sekolah. Di bangku sekolah, teman seringkali adalah rumah kedua. Ada ikatan yang terjalin bukan hanya karena kewajiban belajar bersama, tetapi juga karena kebersamaan sehari-hari. Usai kelas, masih ada waktu nongkrong, bercanda, bahkan sekadar jajan bareng di kantin. Semua terasa akrab, terasa hidup. Namun, begitu memasuki dunia kuliah, atmosfer itu lenyap begitu saja. Pertemanan menjadi sesuatu yang lebih dingin dan individualistis. Teman kuliah seringkali hanyalah partner kerja sementara. Hubungan yang terjalin lebih banyak karena ada tugas kelompok atau kegiatan organisasi. Begitu semua selesai, semua kembali ke dunia masing-masing. Jarang ada yang mau sekadar tinggal sebentar setelah kelas berakhir, apalagi menghabiskan waktu bersama tanpa tujuan. Semua seperti hidup dengan urusannya sendiri-sendiri.
+
+        Fenomena ini tentu membuat mahasiswa merasa terasing. Mereka datang ke kampus, duduk di kelas, bertemu banyak orang, tapi tetap merasa sendirian. Tidak ada ikatan emosional yang kuat seperti saat sekolah. Bagi sebagian mahasiswa, hal ini bisa memukul mental dengan cukup keras. Mereka merasa kehilangan wadah untuk berinteraksi secara alami, kehilangan teman yang benar-benar hadir bukan karena ada kepentingan tertentu. Pertemanan di kampus sering kali diwarnai pragmatisme: kalau menguntungkan, hubungan dijaga; kalau tidak, ya sudah, bubar begitu saja. Dalam kondisi seperti ini, mahasiswa semakin merasa bahwa kuliah adalah sebuah dunia yang penuh dengan kesepian terselubung.
+
+        Lalu ada organisasi mahasiswa. Secara teori, organisasi adalah tempat untuk mengasah soft skill, memperluas jaringan, dan menambah pengalaman. Banyak senior, dosen, maupun pihak kampus yang menyarankan mahasiswa untuk aktif dalam organisasi agar tidak menjadi kupu-kupu, kuliah pulang-kuliah pulang. Organisasi dianggap sebagai ruang pembentukan karakter dan kepemimpinan. Namun, kenyataannya jauh dari ideal. Banyak organisasi di kampus yang berjalan tanpa arah. Isinya seringkali hanya ritual rapat tak berguna, nongkrong hingga larut malam, dan menghamburkan uang di kafe dengan alasan pertemuan. Yang dibahas dalam rapat pun sering tidak menghasilkan keputusan berarti. Waktu, tenaga, bahkan uang mahasiswa terbuang sia-sia.
+
+        Ironisnya, meskipun sadar bahwa organisasi tersebut tidak sehat, banyak mahasiswa tetap bertahan di dalamnya. Mereka takut keluar karena khawatir dicap pasif, tidak berguna, atau sekadar kupu-kupu. Ada tekanan sosial yang membuat mahasiswa rela menukar waktunya dengan hal-hal yang tidak produktif, hanya demi mempertahankan label bahwa mereka aktif berorganisasi. Akibatnya, mereka yang sebenarnya ingin berkembang justru terjebak dalam lingkaran senioritas, formalitas, dan kesia-siaan. Mereka tahu organisasi tidak banyak memberi manfaat, tapi keyakinan buta dan ketakutan akan stigma membuat mereka tetap bertahan.
+
+        Apakah organisasi yang baik itu ada? Tentu saja ada. Namun, sulit sekali ditemukan. Kalaupun ada, jumlahnya sangat sedikit dan biasanya diisi oleh mahasiswa yang benar-benar punya visi, bukan sekadar ikut-ikutan. Organisasi yang sehat bisa menjadi wadah luar biasa untuk pengembangan diri. Tetapi sayangnya, mayoritas organisasi hanya berputar pada pola lama: banyak bicara, sedikit kerja nyata. Bagi mahasiswa yang haus akan ruang untuk berkembang, kondisi ini jelas sangat mengecewakan.
+
+        Di luar organisasi, sebenarnya banyak peluang besar yang ditawarkan dunia perkuliahan: Program Kreativitas Mahasiswa (PKM), Pertukaran Mahasiswa Merdeka (PMM), hingga berbagai macam beasiswa dan kompetisi. Semua itu adalah pintu emas bagi mereka yang ingin melangkah lebih jauh. Namun, akses untuk memasukinya tidaklah mudah. Hampir semua peluang itu mengharuskan mahasiswa untuk punya tim atau relasi yang solid. Sayangnya, tidak semua orang pandai bergaul, tidak semua orang bisa dengan mudah membangun jaringan. Banyak mahasiswa yang pintar, kreatif, dan berbakat, tetapi gagal memanfaatkan peluang hanya karena kesulitan mencari rekan. Akhirnya, peluang besar itu hanya dikuasai oleh kelompok tertentu yang sudah punya jaringan kuat sejak awal.
+
+        Selain itu, perkuliahan menuntut mahasiswa untuk belajar mandiri bukan hanya dalam hal akademik, tetapi juga dalam hidup sehari-hari. Mereka harus belajar mengatur waktu, mengatur keuangan, bahkan mengurus kesehatan mentalnya sendiri. Bagi mahasiswa yang merantau, tantangan ini semakin berat. Jauh dari keluarga, mereka dipaksa untuk cepat dewasa, meski pada kenyataannya tidak semua orang siap. Banyak mahasiswa yang masih terbawa sifat kekanak-kanakan, hasil dari pola asuh, lingkungan, atau latar belakang sebelumnya. Mereka tiba-tiba dihadapkan dengan dunia yang keras, penuh tuntutan, tetapi minim bimbingan. Dalam kondisi seperti ini, tidak jarang mahasiswa merasa kebingungan. Mereka tahu harus mandiri, tapi tidak tahu bagaimana caranya.
+
+        Sementara itu, dosen dan pihak kampus seringkali terlalu mudah bersembunyi di balik kata “dewasa”. Mahasiswa dianggap sudah dewasa, maka harus bisa mengatur dirinya sendiri. Mahasiswa dianggap sudah dewasa, maka harus bisa menyelesaikan masalah tanpa banyak bimbingan. Mahasiswa dianggap sudah dewasa, maka jika gagal, itu salah mereka sendiri. Padahal, kedewasaan tidak datang serta merta hanya karena seseorang sudah memakai jaket almamater. Kedewasaan adalah proses yang dipengaruhi banyak hal, dan seringkali membutuhkan waktu, bahkan bimbingan.
+
+        Dengan semua kerumitan ini, wajar jika banyak mahasiswa merasa bingung dan bertanya: sebenarnya apa sih inti dari kuliah ini? Apakah kuliah hanya sekadar formalitas untuk mendapatkan gelar? Apakah kuliah hanya arena ujian mental, siapa yang bisa bertahan hidup dengan baik? Apakah kuliah benar-benar tempat untuk mencari ilmu, atau hanya sistem bisnis besar yang mengandalkan uang mahasiswa?
+
+        Masa kuliah memang adalah fase yang paling aneh. Mahasiswa terjebak di tengah-tengah: sudah tidak bisa lagi bersandar sepenuhnya pada guru atau orang tua, tapi juga belum benar-benar mampu berdiri kokoh sebagai individu yang mandiri. Kuliah menjadi ruang penuh kontradiksi. Di satu sisi, ia menjanjikan masa depan yang cerah. Di sisi lain, ia seringkali hanya meninggalkan rasa lelah dan kebingungan. Mahasiswa harus belajar memahami bahwa kuliah bukanlah segalanya, tetapi juga tidak bisa disepelekan. Ia adalah bagian dari perjalanan hidup yang penuh paradoks: sebuah penjara berbayar yang katanya untuk memerdekakan.
+ `},
+         {id: 5, title: 'Matkul of Madness', meta: 'Bab 5', content: `
+         Kuliah di Indonesia semakin hari semakin terasa sebagai sebuah ironi besar. Banyak orang tua, guru, bahkan pejabat pemerintah yang selalu menekankan bahwa kuliah adalah jalan emas menuju masa depan. Mereka menanamkan harapan bahwa setelah menempuh pendidikan tinggi, seseorang akan lebih siap menghadapi dunia kerja, lebih matang secara intelektual, dan lebih kompeten dalam bidang yang digelutinya. Namun, ketika seorang mahasiswa benar-benar masuk ke dalam dunia perkuliahan, yang ia temukan justru tumpukan mata kuliah yang seolah tidak ada habisnya. Dalam satu program studi saja, seorang mahasiswa bisa menghadapi lebih dari empat puluh mata kuliah. Jika ditotal dengan pilihan, remedial, dan pengayaan lain, jumlahnya bahkan bisa menembus lima puluh. Apakah ini bukan sebuah kegilaan sistem?
+
+         Mari kita mulai dari fakta paling sederhana. Mahasiswa yang baru masuk ke semester tiga biasanya sudah menempuh sekitar dua puluh hingga dua puluh lima mata kuliah. Artinya, perjalanan mereka baru setengah jalan, dan masih ada tiga puluh atau lebih mata kuliah lain yang menunggu. Jika dilihat sekilas, mungkin orang akan berpikir, “Bagus dong, berarti mahasiswa Indonesia mendapat bekal ilmu yang luas.” Tapi coba kita bedah lebih dalam: apakah benar semua mata kuliah itu bermanfaat? Apakah benar mahasiswa membutuhkan sebanyak itu untuk bisa disebut sarjana?
+
+         Ambil contoh mata kuliah umum yang hampir selalu muncul di setiap program studi: Bahasa Indonesia, Pendidikan Kewarganegaraan, Agama, Pancasila, Bahasa Inggris, dan semacamnya. Sekilas mata kuliah ini terdengar penting. Namun, mari jujur pada diri kita sendiri. Bukankah semua itu sudah diajarkan selama dua belas tahun di bangku sekolah dasar hingga menengah? Kita sudah belajar Bahasa Indonesia sejak kelas satu SD. Kita sudah dijejali materi kewarganegaraan sejak SMP. Kita sudah menghafal sila Pancasila sejak TK bahkan. Lalu, apa yang membuat kuliah harus kembali mengulang semua itu dengan kemasan yang sama?
+
+         Kalau memang isinya berbeda, misalnya Bahasa Indonesia untuk penulisan akademik atau Kewarganegaraan untuk menganalisis dinamika politik kontemporer, tentu masuk akal. Tapi kenyataannya, sebagian besar mata kuliah itu hanya copy-paste dari materi sekolah. Hanya beda cara dosennya menyampaikan. Mahasiswa dipaksa duduk, mendengarkan, mencatat, lalu mengulang ujian tentang hal-hal yang sudah mereka hafal belasan tahun sebelumnya. Itu bukan pembelajaran, itu pemborosan waktu.
+
+         Kegilaan ini tidak hanya ada di bangku kuliah. Indonesia terkenal sebagai salah satu negara dengan jumlah mata pelajaran terbanyak di setiap jenjang sekolah. Bayangkan saja, seorang anak SMA bisa menempuh hingga 20–22 mata pelajaran dalam satu minggu. Dari fisika, kimia, biologi, matematika, sejarah, geografi, ekonomi, bahasa, agama, olahraga, seni, bahkan komputer. Apakah semua itu benar-benar berguna? Tidak. Sebagian besar hanya masuk telinga kanan, keluar telinga kiri. Ujian berlalu, semua hafalan menguap. Yang tersisa hanyalah mata pelajaran yang benar-benar dekat dengan minat si siswa.
+
+         Orang-orang berdalih, banyaknya mata pelajaran ini untuk mencari minat siswa. Katanya, dengan mencicipi semua bidang, siswa akan menemukan bakatnya. Tapi serius? Kalau tujuan utamanya hanya untuk menemukan minat, mengapa harus dengan mengorbankan bertahun-tahun waktu anak muda untuk menghafal rumus dan definisi yang sebagian besar akan mereka lupakan? Ilmu psikologi sudah sejak lama memiliki tes minat bakat yang mampu memetakan kecenderungan seseorang bahkan sebelum ia masuk SMP. Hasilnya jauh lebih akurat, hemat waktu, dan tidak membuat siswa terbebani dengan 22 mapel sekaligus. Jadi alasan “mencari minat” hanyalah dalih yang terdengar manis, tapi sesungguhnya tidak logis.
+
+         Dan setelah siswa “menemukan” minatnya, lalu memilih jurusan di perguruan tinggi, mereka kembali dihantam oleh sistem yang lebih gila: puluhan mata kuliah yang jumlahnya bisa mencapai lima puluh. Katakanlah seorang mahasiswa masuk jurusan hukum. Apakah ia harus menempuh 45–50 mata kuliah untuk bisa menjadi sarjana hukum? Padahal kenyataannya, hanya sebagian kecil dari mata kuliah itu yang akan ia gunakan nanti. Begitu juga mahasiswa teknik, kedokteran, komunikasi, ekonomi, atau sastra. Masing-masing harus menelan puluhan mata kuliah, padahal yang benar-benar relevan hanya segelintir.
+
+         Parahnya lagi, banyak mata kuliah yang isinya mirip. Ada yang tumpang tindih 70–80% dengan mata kuliah lain, hanya berbeda nama atau fokus sedikit. Mahasiswa dipaksa merasa bahwa itu sesuatu yang baru, padahal sebenarnya sama saja. Inilah yang membuat mahasiswa sering mengeluh, “Loh, ini kan udah kita pelajari semester lalu, cuma beda judul.” Hal ini menimbulkan kebosanan yang luar biasa, karena mahasiswa merasa seperti dipermainkan oleh sistem.
+
+         Mari kita tanyakan hal yang sederhana: apakah seorang fresh graduate benar-benar ingat semua yang ia pelajari di kuliah? Jawabannya hampir pasti tidak. Banyak mahasiswa yang begitu lulus hanya mengingat setengah atau bahkan kurang dari mata kuliah yang pernah mereka ambil. Tanyakan kepada seorang sarjana teknik tentang materi dari salah satu mata kuliah dasarnya, besar kemungkinan ia akan lupa. Tanyakan kepada sarjana ekonomi tentang teori yang pernah ia pelajari semester dua, banyak yang sudah menguap. Sementara itu, yang biasanya masih mereka ingat dengan baik adalah hasil dari praktikum, proyek, atau pengalaman nyata.
+
+         Praktikum memaksa mahasiswa untuk benar-benar menguasai apa yang mereka pelajari. Karena ada aksi nyata, ada kesalahan yang bisa diperbaiki, ada pengalaman yang melekat. Itulah yang membuat pelajaran bertahan lama di memori. Sebaliknya, mata kuliah teori yang hanya berisi hafalan cenderung cepat hilang. Jadi untuk apa menjejalkan puluhan mata kuliah teori jika pada akhirnya hanya menjadi kenangan samar?
+
+         Sistem pendidikan Indonesia tampaknya terlalu terobsesi dengan kuantitas. Semakin banyak mata kuliah, semakin dianggap berkualitas. Padahal, realitas di lapangan justru sebaliknya: semakin banyak, semakin dangkal. Mahasiswa hanya bisa menyentuh permukaan dari tiap mata kuliah, tidak pernah benar-benar mendalami. Akibatnya, mereka lulus dengan bekal pengetahuan yang setengah matang di semua bidang, tapi tidak benar-benar ahli di satu bidang pun.
+
+         Kenapa sistem ini tetap dipertahankan? Ada beberapa kemungkinan. Pertama, warisan kolonial. Sistem pendidikan kita sejak zaman Belanda memang dibentuk untuk mencetak pegawai, bukan pemikir kreatif. Karena itu lebih menekankan hafalan dan formalitas. Kedua, industri pendidikan. Makin banyak mata kuliah berarti makin banyak dosen, makin besar struktur, makin besar pula uang yang berputar. Kurikulum gemuk bisa jadi cara untuk menciptakan lapangan kerja bagi dosen, meskipun mahasiswa jadi korban. Ketiga, mindset “lebih sibuk = lebih pintar”. Banyak orang masih percaya bahwa mahasiswa yang dijejali tugas dan matkul akan lebih berkualitas, padahal kenyataannya hanya menjadikan mereka zombie akademik.
+
+         Ironisnya, setelah 12 tahun sekolah dan 4 tahun kuliah, mahasiswa tetap belum siap menghadapi dunia kerja. Begitu lulus, mereka masih harus training ulang di perusahaan. Artinya, 16 tahun pendidikan formal tidak otomatis membuat orang siap. Itu bukti paling jelas bahwa sistem pendidikan kita gagal fokus. Alih-alih menyiapkan mahasiswa untuk hidup nyata, sistem hanya memaksa mereka menghafal sebanyak mungkin lalu membiarkannya hilang begitu saja.
+
+         Sungguh aneh, mahasiswa dipaksa membayar mahal untuk dihujani lebih dari 40 mata kuliah yang sebagian besar hanya sekadar formalitas. Mahasiswa terjebak dalam lingkaran setan: belajar untuk ujian, bukan belajar untuk hidup. Mereka tahu bahwa banyak yang dipelajari akan segera dilupakan. Tapi sistem tidak memberi pilihan lain. Mereka harus ikut arus kalau ingin mendapat gelar.
+
+         Pertanyaannya, apakah tidak ada cara yang lebih masuk akal? Bayangkan jika kurikulum dipangkas menjadi hanya 15–20 mata kuliah inti yang benar-benar relevan dengan bidang studi. Setiap mata kuliah dikupas dalam, dengan kombinasi teori dan praktik yang seimbang. Mahasiswa tidak perlu terpecah konsentrasinya ke puluhan topik, tetapi bisa fokus mendalami keahlian inti mereka. Bukankah itu akan lebih efektif? Bukankah itu lebih realistis untuk menyiapkan mereka menghadapi dunia kerja?
+
+         Tentu saja, ada argumen bahwa mahasiswa harus mendapatkan wawasan luas. Tetapi wawasan luas bukan berarti dipaksa menghafal semuanya. Wawasan luas bisa dibangun lewat pilihan bebas: mahasiswa boleh mengambil mata kuliah dari jurusan lain jika berminat. Dengan begitu, yang mereka ambil benar-benar sesuai kebutuhan, bukan paksaan. Itulah esensi dari pendidikan tinggi: kebebasan memilih, bukan keterpaksaan.
+
+         Sistem yang ada sekarang hanyalah bentuk modern dari penjara akademik. Mahasiswa masuk dengan semangat, lalu dipaksa mengikuti aturan yang kaku, dijejali puluhan mata kuliah yang setengahnya tidak relevan, lalu dikeluarkan dengan gelar yang katanya membanggakan. Tapi di balik itu semua, mereka tahu betul bahwa banyak waktu, energi, dan uang yang telah terbuang sia-sia.
+
+         Kuliah seharusnya menjadi ruang pembebasan, ruang eksplorasi, ruang pendalaman. Bukan ruang untuk menjejalkan kuantitas semu. Dan selama sistem masih mempertahankan 40–50 mata kuliah dalam satu program studi, selama itu pula kuliah di Indonesia akan terus menjadi ironi: sebuah jalan panjang yang tampak megah dari luar, tapi di dalamnya penuh lubang. 
+ `},
+         {id: 6, title: 'Dosen itu Sebenarnya Apa dan Siapa?', meta: 'Bab 6', content: `
+         Dosen itu sebenarnya apa dan siapa? Pertanyaan ini mungkin terdengar sederhana, namun jawabannya bisa sangat rumit. Di atas kertas, dosen adalah pendidik profesional dan ilmuwan dengan tugas utama mentransformasikan, mengembangkan, serta menyebarluaskan ilmu pengetahuan, teknologi, dan seni melalui pendidikan, penelitian, dan pengabdian kepada masyarakat. Definisi itu begitu indah, bahkan nyaris suci jika dibaca di buku pegangan resmi perguruan tinggi. Namun di lapangan, wajah dosen seringkali jauh berbeda dengan definisi yang digadang-gadang tersebut.
+
+         Mereka sering menolak disamakan dengan guru. Alasannya jelas: guru mendidik anak-anak atau remaja, sementara dosen mendidik mahasiswa yang dianggap sudah dewasa. Guru rata-rata hanya berpendidikan strata satu, sementara dosen banyak yang bergelar magister, doktor, bahkan profesor. Guru mengajar dengan gaji pas-pasan, sedangkan dosen menerima gaji jauh lebih besar, apalagi jika mengajar di kampus swasta elit. Namun ironinya, justru guru-lah yang benar-benar mendidik, sementara dosen hanya sekadar mengajar—bahkan kadang lebih buruk dari itu.
+
+         Di sekolah, guru bukan hanya menyampaikan materi, tetapi juga membentuk karakter. Mereka peduli pada siswanya, membimbing mereka yang lemah, memberi perhatian pada yang kesulitan, dan berusaha menuntun muridnya agar menjadi manusia yang lebih baik. Seorang guru dengan gaji kecil bisa rela pulang sore hanya demi memastikan muridnya mengerti. Mereka bukan hanya pengajar, tapi juga orang tua kedua di sekolah. Sedangkan dosen? Banyak yang bahkan malas hadir, lebih sering melempar kelas dengan presentasi atau tugas, dan jarang benar-benar mengajarkan sesuatu.
+
+         Padahal jika dilihat dari segi gelar, dosen seharusnya jauh lebih mumpuni. Seorang magister telah menempuh pendidikan lebih dari 18 tahun, seorang doktor bahkan bisa lebih dari 22 tahun. Ditambah pengalaman penelitian, seminar, dan publikasi ilmiah, seharusnya mereka memiliki keluasan wawasan dan kedalaman ilmu. Tapi mengapa justru sering kali mahasiswa merasakan sebaliknya? Apakah benar gelar-gelar itu mencerminkan kemampuan mereka? Atau jangan-jangan, gelar hanyalah formalitas akademik yang tak selalu sejalan dengan kualitas nyata?
+
+         Lebih ironis lagi ketika kita membandingkan gaji. Banyak guru masih hidup dengan penghasilan di bawah standar, bahkan tidak cukup untuk memenuhi kebutuhan dasar sehari-hari. Meski demikian, semangat mendidik mereka tidak pernah padam. Mereka mengajar dengan hati, bukan hanya dengan mulut. Sementara itu, dosen yang bergaji besar—bahkan ada yang merangkap jabatan dan mendapat tunjangan tambahan—sering kali malah ogah-ogahan. Tidak sedikit dosen yang secara terang-terangan memaksa mahasiswa membeli buku karyanya sendiri, dan menjadikan itu sebagai syarat kelulusan. Jika tidak membeli, mahasiswa terancam nilai rendah atau bahkan tidak lulus. Bukankah itu bentuk eksploitasi yang sangat memalukan?
+
+         Dosen sering kali menjunjung tinggi adab dan etika. Mereka menuntut mahasiswa untuk berbicara dengan sopan, menulis pesan dengan format yang benar, dan menghormati setiap kata mereka. Tapi mari kita balik pertanyaannya: apakah dosen sendiri sudah mencerminkan adab yang mereka agung-agungkan? Berapa banyak dosen yang membatalkan kelas secara mendadak, bahkan beberapa menit sebelum jadwal dimulai? Berapa banyak dosen yang tidak membalas pesan mahasiswa, atau membalas dengan nada marah hanya karena mahasiswa salah mengetik sapaan? Berapa banyak dosen yang seenaknya menambah tugas, mengubah jadwal, dan memperlakukan mahasiswa seperti pesuruh? Di mana adab yang mereka agungkan itu? Apakah adab hanya berlaku satu arah—mahasiswa ke dosen, tapi tidak sebaliknya?
+
+         Hal yang lebih membingungkan adalah sikap dosen dalam memberi beban. Mereka sendiri pernah menjadi mahasiswa, pernah merasakan sulitnya hidup di masa kuliah, pernah mengeluh tentang tugas yang menumpuk, presentasi membosankan, dan dosen yang seenaknya. Namun mengapa mereka justru mengulang tradisi buruk yang sama kepada generasi setelahnya? Bukankah seharusnya pengalaman itu membuat mereka lebih peka? Bukankah seharusnya mereka bisa memperbaiki sistem, bukan malah melestarikan budaya yang sama buruknya?
+
+         Sering kali mahasiswa bertanya dalam hati: untuk apa sebenarnya dosen menjadi dosen? Apakah benar mereka ingin mendidik, mengabdi, dan berbagi ilmu? Atau sekadar mencari imbalan, mencari status sosial, dan mendapatkan gelar bergengsi? Jika dosen memang serius ingin mendidik, mengapa kelas sering kosong? Jika benar ingin mengabdi, mengapa mahasiswa dibiarkan belajar sendiri tanpa arahan? Jika benar ingin berbagi ilmu, mengapa metode yang dipakai masih kuno, monoton, dan tidak efektif? Pertanyaan-pertanyaan ini menggema di benak banyak mahasiswa, tapi jarang ada yang berani menyuarakannya secara terbuka.
+
+         Ada satu hal yang sering membuat mahasiswa curiga: gelar akademik. Tentu tidak semua, tapi sebagian dosen membuat mahasiswa bertanya-tanya, “Apakah benar gelar ini diperoleh dengan perjuangan yang jujur?” Karena bagaimana mungkin seseorang yang bergelar doktor masih tidak mampu menyusun materi yang runtut? Bagaimana mungkin seorang profesor berbicara di kelas tanpa struktur yang jelas, dan malah membiarkan mahasiswa bingung? Bagaimana mungkin seseorang yang sudah berpuluh tahun belajar tentang ilmu pengetahuan justru memperlihatkan sikap yang jauh dari intelektual? Mahasiswa bukanlah orang bodoh. Mereka bisa melihat siapa dosen yang benar-benar berilmu, dan siapa yang sekadar bersandar pada gelar.
+
+         Ironinya, justru dosen yang seharusnya lebih beradab, lebih terbuka, dan lebih mendidik, sering kali jatuh pada arogansi. Mereka menuntut dihormati bukan karena kualitas, melainkan karena status. Mereka ingin dipandang tinggi bukan karena kebijaksanaan, melainkan karena jabatan. Mereka sering lupa bahwa di dalam kelas, proses belajar bukanlah satu arah. Mahasiswa bukan bejana kosong yang harus diisi, melainkan manusia yang bisa berdiskusi. Namun banyak dosen yang menolak posisi setara itu. Mereka ingin menjadi raja di dalam kelas, sementara mahasiswa hanya rakyat jelata yang harus tunduk.
+
+         Padahal, pendidikan yang sejati adalah ketika dosen mampu mendidik sekaligus mengajar. Ketika dosen bisa menjadi partner diskusi, bukan sekadar penguasa kelas. Ketika dosen bisa memberikan teladan nyata, bukan hanya tuntutan kosong. Gelar akademik, gaji besar, dan status sosial seharusnya membuat mereka semakin rendah hati, bukan semakin congkak. Tapi kenyataannya, yang sering terjadi justru sebaliknya.
+
+         Dosen itu sebenarnya apa dan siapa? Jika melihat definisi ideal, dosen adalah pendidik profesional. Namun melihat realitas di lapangan, banyak dosen justru menjadi simbol kemalasan, arogansi, dan ketidakpedulian. Mereka hadir hanya untuk gaji, hadir hanya untuk nama, hadir hanya untuk menuntut, tanpa benar-benar mendidik. Maka wajar jika mahasiswa merasa kecewa, merasa dikhianati oleh sistem yang seharusnya mencerdaskan.
+
+         Mahasiswa bukan menuntut kesempurnaan, bukan pula mengharap dosen jadi malaikat. Yang mahasiswa inginkan sederhana: dosen yang benar-benar mendidik, bukan sekadar mengajar. Dosen yang memberi teladan, bukan hanya tuntutan. Dosen yang hadir bukan hanya fisiknya, tapi juga hatinya. Jika semua dosen bisa melakukannya, maka pertanyaan “dosen itu sebenarnya apa dan siapa?” tak perlu lagi diajukan. Tapi selama kenyataan di lapangan masih seburuk ini, pertanyaan itu akan terus bergema, dari generasi mahasiswa satu ke generasi mahasiswa berikutnya.
+ ` },
+         {id: 7, title: 'Relasi', meta: 'Bab 7', content: `
+          Dalam kehidupan sehari-hari, terutama di dunia pendidikan dan pekerjaan, istilah “orang dalam” atau ordal sudah menjadi semacam hantu yang menghantui. Ia tidak kasat mata, tidak selalu diumumkan secara terang-terangan, tapi dampaknya bisa dirasakan nyata. Relasi, koneksi, jaringan, atau apa pun istilah manis yang kita gunakan, pada akhirnya menunjuk pada hal yang sama: akses istimewa yang tidak semua orang miliki. Yang menarik, relasi ini selalu menimbulkan perdebatan, bahkan pertentangan batin dalam diri manusia. Saat seseorang belum memiliki ordal, ia bisa menjadi pengkritik keras, menyebutnya sebagai bentuk ketidakadilan. Namun ketika suatu hari ia sendiri memiliki akses itu, tiba-tiba sikapnya berubah drastis menjadi pembela garis keras. Apa yang dulu ia hujat, kini ia bela mati-matian. Fenomena ini bukan hanya soal relasi itu sendiri, tapi juga soal hipokrisi manusia yang begitu cair mengikuti kepentingan.
+
+          Relasi bisa dibagi ke dalam dua kategori besar. Pertama, ordal biologis, yaitu relasi yang diperoleh karena faktor kelahiran: anak pejabat, anak dosen, anak profesor, anak pengusaha besar. Mereka lahir dengan akses yang tidak dimiliki orang lain. Bahkan sebelum mereka berusaha apa pun, pintu-pintu sudah terbuka lebar. Kedua, ordal usaha, yaitu relasi yang diperoleh melalui perjuangan, interaksi sosial, pertemanan, jaringan organisasi, atau kerja keras dalam membangun citra dan kedekatan dengan orang-orang berpengaruh. Ada pula yang meraihnya dengan cara-cara licik: menjilat, menjatuhkan orang lain, atau sekadar pencitraan murahan. Di sinilah dilema bermula: apakah ordal biologis itu adil disebut sebagai rezeki? Apakah ordal usaha sah dianggap sebagai hasil kerja keras? Ataukah keduanya sama saja: bentuk nyata dari ketidaksetaraan yang dibiarkan hidup di tengah masyarakat?
+
+          Orang-orang yang tidak memiliki ordal cenderung bersuara lantang bahwa ordal adalah keburukan. Mereka melihat betapa beasiswa, kesempatan magang, atau pekerjaan bergengsi lebih mudah jatuh ke tangan mereka yang punya koneksi. Sering kali, performa akademik atau kemampuan justru tidak terlalu dipedulikan. Yang lebih penting adalah siapa yang mengenal siapa. Hal ini menimbulkan rasa frustasi, seakan-akan kesetaraan yang digaungkan hanyalah pepesan kosong. Apalah artinya bekerja keras mati-matian, kalau akhirnya yang lolos adalah mereka yang punya jalur belakang? Kesetaraan hanyalah jargon indah yang dijual lembaga-lembaga besar untuk menenangkan hati rakyat kecil, padahal praktiknya timpang dan jauh dari harapan.
+
+          Namun bagi mereka yang aktif membangun jaringan, ordal dianggap sah-sah saja. Mereka menganggapnya sebagai hasil dari upaya panjang: ikut organisasi, merawat hubungan dengan dosen, membangun koneksi lewat seminar atau forum, bahkan sengaja melobi pihak-pihak penting. Dari sudut pandang mereka, ordal bukan sekadar keuntungan instan, melainkan modal sosial yang diperoleh dengan susah payah. Maka wajar jika mereka merasa pantas menikmatinya. Mereka tidak merasa bersalah, karena dalam pandangan mereka, semua orang sebenarnya punya kesempatan yang sama untuk berjejaring, hanya saja ada orang-orang yang memilih pasif dan diam. Kesempatan itu tidak datang dengan sendirinya, tetapi harus dijemput. Jadi, mereka yang gagal bukan karena sistem, melainkan karena dirinya sendiri malas berusaha. Inilah logika yang membuat ordal usaha mendapat pembelaan moral.
+
+          Lalu bagaimana dengan ordal biologis? Di sinilah letak kebuntuan argumen. Anak pejabat atau anak dosen tentu tidak bisa memilih dilahirkan di keluarga mana. Bagi mereka, itu adalah rezeki yang tidak bisa ditolak. Bukankah setiap orang punya jalannya masing-masing? Bukankah Tuhan sendiri yang menentukan siapa lahir dari rahim siapa? Maka bagi mereka, ordal biologis bukanlah ketidakadilan, melainkan bagian dari takdir. Mereka merasa tidak bersalah ketika akses itu dimanfaatkan, bahkan melihatnya sebagai kewajaran yang patut disyukuri. Sebaliknya, bagi mereka yang tidak punya ordal biologis, fenomena ini adalah bentuk nyata ketidakadilan struktural yang sulit dilawan. Bagaimana mungkin seseorang bisa bersaing secara sehat kalau garis start-nya saja sudah berbeda? Yang satu lahir di tengah fasilitas berlimpah, jaringan orang tua yang luas, serta akses instan ke dosen atau pejabat. Yang satu lagi lahir di keluarga biasa-biasa saja, yang jangankan mengenal dosen, sekadar biaya kuliah pun harus ngos-ngosan dicari. Kesetaraan di sini hanya jadi ilusi.
+
+          Ketimpangan ini semakin terasa di lingkungan perkuliahan. Seorang mahasiswa yang dekat dengan dosen, entah karena sering membantu penelitian, atau sekadar sering nongkrong bersama, cenderung mendapat nilai lebih baik. Kadang, performanya tidak sebagus teman-temannya. Tapi karena kedekatan itu, nilainya bisa aman, bahkan cemerlang. Sebaliknya, mahasiswa yang rajin belajar tapi tidak dekat dengan dosen, nilainya rawan jeblok. Apalagi jika dosennya terkenal “suka pilih kasih.” Maka semakin nyata bahwa relasi memainkan peran besar dalam menentukan nasib akademik mahasiswa, lebih daripada kerja keras itu sendiri. Bukankah ini ironi? Pendidikan yang katanya menjunjung meritokrasi ternyata tunduk pada logika relasi.
+
+          Jika sudah begini, kita perlu bertanya: apakah kesetaraan benar-benar ada? Ataukah hanya sekadar slogan indah untuk menghibur mereka yang kalah dalam pertarungan sosial? Apakah ordal bisa dibenarkan? Jawabannya rumit. Dari satu sisi, relasi adalah bagian alami dari kehidupan manusia. Sejak dulu, manusia bertahan hidup karena jaringan sosial. Tidak ada manusia yang benar-benar mandiri. Maka wajar jika jaringan ini menjadi modal penting untuk mencapai sesuatu. Namun dari sisi lain, relasi sering merampas hak orang lain yang sebenarnya lebih layak. Mereka yang berprestasi bisa terpinggirkan hanya karena tidak punya akses. Kesetaraan yang dijanjikan oleh lembaga pendidikan dan instansi kerja menjadi mitos belaka.
+
+          Kenyataan pahit ini menunjukkan bahwa hidup tidak pernah benar-benar adil. Selalu ada yang diuntungkan, dan selalu ada yang dirugikan. Relasi hanyalah satu dari sekian banyak bentuk ketidakadilan itu. Yang membuatnya semakin problematis adalah cara manusia menyikapinya. Saat belum memiliki ordal, mereka menyebutnya kotor dan penuh nepotisme. Tapi begitu merasakan manfaatnya, mereka tiba-tiba menjadi pembela. Mereka lupa kata-kata lantang yang dulu pernah keluar dari mulutnya. Inilah hipokrisi sosial yang menjijikkan: manusia tidak benar-benar menolak ordal, mereka hanya iri karena tidak memilikinya. Ketika kesempatan itu akhirnya datang, mereka akan memeluknya erat, seolah-olah sejak awal merekalah yang benar.
+
+          Jadi, salahkah ordal? Atau salahkah manusia yang memanfaatkannya? Pertanyaan ini sulit dijawab. Relasi pada dirinya sendiri hanyalah fenomena netral. Yang membuatnya bermasalah adalah ketika ia dipakai untuk melanggengkan ketidakadilan. Jika ordal usaha masih bisa diperdebatkan sebagai bentuk kerja keras, maka ordal biologis lebih sulit dicerna. Sebab tidak ada perjuangan apa pun di sana, hanya keberuntungan kelahiran. Namun dalam masyarakat yang tidak ideal, keberuntungan itu tetap dianggap sah, bahkan diagungkan. Maka kesetaraan pun semakin tampak sebagai ilusi. Kita hidup dalam dunia yang konon meritokratis, tapi sesungguhnya oligarkis.
+
+          Kesimpulannya, ordal adalah wajah asli ketidaksetaraan yang dibungkus dengan istilah rezeki, usaha, atau takdir. Kita bisa saja menolak, marah, dan mengkritiknya. Tapi pada akhirnya, manusia adalah makhluk yang rapuh. Ia akan berubah sikap tergantung posisinya. Yang dulu menolak, bisa berubah menjadi pembela. Yang dulu mengutuk, bisa tiba-tiba bersyukur. Maka pertanyaan sebenarnya bukanlah apakah ordal salah atau benar, melainkan: apakah kita siap jujur menghadapi kenyataan bahwa dunia ini memang tidak adil, dan ordal hanyalah salah satu caranya menertawakan kita?
+
+`},
+         {id: 8, title: 'Kontrak Sunyi Mahasiswa', meta: 'Bab 8', content: `
+         Mahasiswa pada dasarnya adalah manusia biasa. Ia bisa tertawa, bisa menangis, bisa merasa lelah, bahkan bisa putus asa hingga memilih jalan tragis seperti bunuh diri. Tidak ada status “mahasiswa” yang mampu membuat seseorang kebal dari kenyataan bahwa manusia rapuh. Bahkan mahasiswa psikologi yang setiap hari mempelajari teori-teori tentang perilaku manusia, memahami berbagai metode terapi, serta hafal istilah-istilah coping mechanism pun tetap bisa jatuh ke dalam jurang depresi. Pengetahuan tidak serta-merta menjamin ketahanan mental. Di balik senyum cerdas, jawaban lugas di kelas, atau prestasi akademik yang gemilang, banyak mahasiswa menyembunyikan luka yang tidak pernah mereka tunjukkan ke permukaan.
+
+         Yang terlihat pintar dan bijaksana, bisa jadi menyimpan ketakutan yang mendalam. Yang terlihat kuat dan aktif di organisasi, bisa jadi setiap malam menangis di kamar kosnya. Mahasiswa bukanlah robot yang bisa diprogram untuk terus berfungsi dengan sempurna. Mereka hanya manusia yang sedang belajar, meraba jalan menuju kedewasaan, dan mencari cara untuk bertahan dalam kerapuhan. Inilah yang seringkali dilupakan dosen: bahwa mahasiswa yang duduk di hadapan mereka bukan kumpulan mesin akademik, melainkan manusia dengan segala kompleksitasnya.
+
+         Dosen, di sisi lain, juga manusia. Mereka pun bisa lelah, bisa stres, bahkan bisa rapuh. Bedanya, status mereka sudah berbeda. Mereka telah melewati fase menjadi mahasiswa, telah menempuh perjalanan panjang hingga meraih gelar magister, doktor, bahkan profesor. Status itu menempatkan mereka di posisi yang lebih tinggi dibanding mahasiswa. Mereka bukan lagi “pembelajar” dalam arti sempit, tetapi telah menjadi “role model.” Mahasiswa memandang dosen bukan sekadar pengajar, tapi sosok yang berhasil bertahan dalam dunia akademik selama 20 tahun atau lebih. Dari dosen, mahasiswa melihat sosok yang kuat, berilmu, dan dihormati. Di situlah letak tanggung jawab moral seorang dosen: ia tidak lagi hanya bertugas mentransfer ilmu, tetapi juga menjadi teladan bagi generasi yang sedang tumbuh.
+
+         Namun, apakah salah jika dosen sesekali menjadi teman bagi mahasiswa? Apakah aib jika seorang dosen memperlakukan mahasiswanya dengan kelembutan, dengan empati, dengan kemanusiaan? Dunia pendidikan bukanlah tempat untuk mengulang keburukan masa lalu dengan dalih tradisi. Pendidikan seharusnya menjadi ruang untuk memperbaiki apa yang salah, bukan memperpanjang siklus penderitaan dengan alasan “saya dulu juga diperlakukan begitu.” Kalau dosen pernah merasakan bobroknya sistem di masa lalu, bukankah tugas moralnya sekarang adalah memperbaiki? Apa gunanya pendidikan kalau hanya mewariskan luka?
+
+         Dunia pendidikan seharusnya mencetak generasi unggul, generasi yang arif dan bijaksana. Mahasiswa adalah calon pemimpin masa depan. Dan dosen, dengan segala previlege yang mereka miliki, seharusnya menggunakan posisi itu untuk menuntun generasi baru, bukan mempersempit langkah mereka. Gelar magister, doktor, dan profesor bukanlah sekadar hiasan di kartu nama atau tanda status sosial. Gelar itu adalah amanah. Setiap gelar yang disematkan, selalu ada harapan dari pemberi gelar bahwa penerimanya akan menjadi manusia yang baik, berkontribusi, dan membawa perubahan. Setidaknya, perubahan kecil dalam lingkup kelas, fakultas, atau keluarga sekalipun.
+
+         Lalu, untuk apa seseorang menghabiskan puluhan tahun belajar, menulis disertasi panjang, dan melewati ujian-ujian akademik yang sulit, jika pada akhirnya tidak bisa membawa perubahan apa pun? Untuk apa gelar tinggi jika fungsinya hanya membuat jarak dengan mahasiswa, bukan mendekatkan hati? Gelar seharusnya membuat seseorang semakin rendah hati, karena ilmu sejati adalah ketika ia bermanfaat bagi orang lain. Namun kenyataannya, banyak dosen yang justru menjadikan gelar sebagai tameng arogansi, seolah-olah status itu membuat mereka lebih manusiawi daripada mahasiswa. Padahal, mahasiswa pun manusia. Sama-sama rapuh, sama-sama bisa jatuh, hanya berbeda fase hidup.
+
+         Di sinilah pentingnya peran dosen sebagai pemimpin. Ada sebuah pepatah yang sering dikutip: “Gerombolan singa yang dipimpin anjing akan tercerai berai, sedangkan gerombolan anjing yang dipimpin singa akan bersatu menjadi kekuatan.” Pepatah ini amat relevan dengan dunia pendidikan. Mahasiswa bisa saja terlihat berantakan, keras kepala, atau kehilangan arah. Namun ketika mereka dipimpin oleh dosen yang tepat, mereka bisa menjelma menjadi kekuatan yang luar biasa. Sebaliknya, mahasiswa yang cerdas sekalipun bisa tercerai berai jika dipimpin oleh dosen yang buruk. Kepemimpinan seorang dosen bukan soal seberapa tinggi gelarnya, tapi seberapa mampu ia membimbing mahasiswa dengan hati.
+
+         Jarang disadari, bahwa setiap mahasiswa menulis kontrak sunyi kepada dosennya. Kontrak itu tidak pernah diucapkan secara verbal, tidak tertulis di atas kertas, tapi nyata adanya di dalam hati mereka. Isi kontrak itu sederhana: “Saya akan belajar dari Anda, bukan hanya tentang ilmu, tapi tentang bagaimana menjadi manusia.” Mahasiswa berharap dosennya tidak hanya mengajarkan teori, tetapi juga memberi teladan bagaimana menghadapi hidup. Mahasiswa ingin melihat bahwa ilmu yang dipelajari dosennya selama puluhan tahun benar-benar tertanam dalam sikapnya, bukan sekadar diucapkan di kelas.
+
+         Namun seringkali, kontrak sunyi ini dikhianati. Dosen yang datang seenaknya, membatalkan kelas tanpa kabar, memarahi mahasiswa karena salah format chat, atau menuntut adab tanpa memberi teladan, secara tidak sadar sedang merobek kontrak itu. Mahasiswa kehilangan kepercayaan, kehilangan pegangan, bahkan kehilangan semangat belajar. Bagi mahasiswa, dosen bukan hanya penyampai materi, tapi representasi dari dunia pendidikan itu sendiri. Jika dosen gagal memberi teladan, maka runtuhlah wibawa pendidikan di mata mahasiswa.
+
+         Penting bagi dosen untuk menyadari bahwa mahasiswa bukan musuh yang harus ditaklukkan. Mereka adalah generasi yang sedang mencari arah. Mereka tidak selalu salah, mereka hanya butuh bimbingan. Pepatah lain mengatakan: “Rakyat tidak pernah salah, hanya pemimpinnya yang tidak tahu cara memimpin.” Hal ini berlaku pula di dunia kampus. Mahasiswa tidak sepenuhnya salah jika mereka kehilangan semangat, bingung, atau bahkan memberontak. Yang salah adalah pemimpin yang tidak tahu cara menuntun mereka.
+
+         Maka, dosen seharusnya memaafkan mahasiswanya, membimbing mereka menuju jalan yang lebih baik, bukan menghukum atau mempermalukan mereka di depan umum. Pendidikan tidak pernah tentang memperlihatkan siapa yang lebih pintar, tapi tentang bagaimana bersama-sama tumbuh menjadi lebih baik. Dosen harus berani meninggalkan budaya buruk yang diwariskan masa lalu, dan menciptakan budaya baru yang lebih manusiawi. Dunia pendidikan tidak boleh hanya menjadi pabrik gelar, tapi harus menjadi ruang pembentukan manusia seutuhnya.
+
+         Pada akhirnya, dosen harus ingat: mereka adalah orang-orang hebat yang mendapat kesempatan pendidikan setinggi itu. Previlege itu bukan untuk diri mereka sendiri, melainkan untuk memberi manfaat sebesar-besarnya bagi mahasiswa, masyarakat, dan bangsa. Di tangan merekalah nasib generasi penerus ditentukan. Jika mereka hanya mengulang keburukan masa lalu, maka generasi yang lahir tidak akan pernah lebih baik dari sebelumnya. Namun jika mereka berani memperbaiki, menjadi teladan, dan menepati kontrak sunyi yang ditulis mahasiswa di dalam hatinya, maka pendidikan benar-benar akan menjadi jalan menuju masa depan yang lebih indah. 
+ `},
+         {id: 9, title: 'Sistem Pendidikan', meta: 'Bab 9', content: `
+         Pendidikan, sejak lama digadang-gadang sebagai kunci masa depan bangsa. Hampir setiap pejabat, guru, hingga orang tua akan mengatakan bahwa pendidikan adalah jalan menuju kesuksesan, pintu menuju kehidupan yang lebih layak. Pertanyaannya: benar kah begitu? Apakah pendidikan di Indonesia hari ini benar-benar menjadi jembatan menuju masa depan yang lebih baik, atau justru jebakan yang membuat anak-anak, remaja, bahkan mahasiswa kehilangan dirinya sendiri? Sistem pendidikan di negeri ini sudah berjalan puluhan tahun, terus berganti kurikulum, terus berganti jargon, tetapi tetap saja pertanyaan mendasar itu menghantui: sebenarnya, pendidikan di Indonesia itu tujuannya untuk apa?
+
+         Pemerintah mencanangkan wajib belajar 9 tahun, bahkan kini ada dorongan ke arah wajib belajar 12 tahun. Secara teori, ini terdengar mulia: semua anak harus mendapat hak pendidikan agar bisa hidup lebih baik. Tetapi mari kita lihat praktiknya. Sejak umur 6 atau 7 tahun, anak-anak dipaksa masuk sekolah dasar. Padahal, secara kognitif, anak-anak usia itu belum siap menerima beban pelajaran yang berat. Di fase usia dini, otak mereka masih lebih cocok diajak bermain, diajak bereksplorasi, belajar lewat pengalaman nyata. Tetapi di sekolah kita? Mereka harus duduk diam berjam-jam, dijejali pengetahuan umum yang bahkan orang dewasa sering lupa, lalu dipaksa menghadapi Ulangan Tengah Semester (UTS) dan Ulangan Akhir Semester (UAS). Logikanya di mana? Anak sekecil itu diuji layaknya pekerja yang sedang mengejar target.
+
+         Waktu sekolah di Indonesia pun termasuk yang paling “kejam”. Bayangkan, anak kelas 1–4 SD sudah masuk jam 7 pagi dan pulang jam 12 siang. Anak kelas 5–6 pulang jam 1 siang. Lanjut SMP dan SMA, jam pulangnya bisa sampai jam 2 atau jam 3 sore. Itu artinya, lebih dari setengah hidup anak dihabiskan di sekolah. Apakah dengan jam belajar sepanjang itu kualitas pendidikan kita meningkat? Nyatanya tidak. Kita tetap dikenal sebagai negara dengan kualitas SDM rendah. Jadi, buat apa anak-anak dikurung selama itu kalau ujung-ujungnya mereka justru stres, bosan, kehilangan masa kecil, dan tidak berkembang secara optimal?
+
+         Ironinya, setiap hari mereka digempur 3–4 mata pelajaran sekaligus. Hari ini matematika, IPA, IPS, Bahasa Indonesia. Besok sejarah, PPKN, seni budaya, bahasa asing. Belum lagi PR menumpuk, tugas kelompok, hafalan, presentasi. Anak-anak bukan lagi manusia kecil yang harusnya bermain dan tumbuh alami, tetapi mesin hafalan yang dipaksa bekerja demi nilai di rapor. Katanya demi masa depan yang lebih baik, tapi siapa yang bisa menjamin itu? Banyak siswa pintar di sekolah justru kesulitan di kehidupan nyata. Sebaliknya, mereka yang dianggap “nakal” atau “tidak berprestasi” sering kali justru lebih tahan banting ketika dewasa.
+
+         Kalau kita tarik lebih dalam, persoalan ini sebenarnya berakar dari rumah. Indonesia dikenal dengan ekonomi yang rendah dan kualitas SDM yang juga rendah. Banyak orang tua tidak siap, baik secara finansial maupun mental, untuk memiliki anak. Tapi ironisnya, mereka justru gemar memiliki anak banyak, seolah-olah anak adalah “tabungan sosial”. Akhirnya anak-anak tumbuh dalam kekerasan, dalam ketidakpedulian, dalam kemiskinan, dalam kesunyian. Tidak jarang, anak-anak ini sudah terluka bahkan sebelum mengenal dunia sekolah. Dan alih-alih sekolah menjadi ruang penyembuhan, sistem pendidikan kita justru menambah luka itu. Anak yang sudah lelah di rumah, semakin lelah di sekolah. Anak yang butuh kasih sayang, justru dapat tambahan PR. Anak yang butuh teman bicara, malah dihakimi karena dianggap malas belajar.
+
+         Sekolah pertama, yaitu keluarga, sudah gagal. Sekolah kedua, yaitu institusi pendidikan dasar hingga menengah, ikut-ikutan gagal. Alih-alih mengajarkan adab, empati, dan etika, sekolah kita sibuk mencekoki anak-anak dengan puluhan mata pelajaran. Lalu apakah hasilnya sepadan? Nyatanya tidak. Banyak anak pintar secara akademik tetapi kering secara moral. Mereka bisa menjawab soal matematika rumit, tetapi tidak tahu cara menghormati orang tua. Mereka bisa menghafal pasal undang-undang, tetapi tidak mengerti nilai keadilan.
+
+         Di sinilah kita bisa belajar dari negara lain. Jepang, misalnya, memutuskan bahwa anak kelas 1–3 SD hanya belajar etika, adab, kedisiplinan, dan kebersihan. Akademik? Belakangan saja. Hasilnya? Jepang dikenal sebagai negara dengan etika dan moralitas publik terbaik di dunia. Finlandia lebih ekstrim lagi. Tidak ada PR, jam sekolah singkat, guru betul-betul dipilih dengan ketat dan dipastikan profesional. Hasilnya? Finlandia selalu menempati peringkat teratas dalam kualitas pendidikan global. Lalu bagaimana dengan Indonesia? Kita punya jam belajar panjang, PR menumpuk, guru asal comot—hasilnya? Kualitas pendidikan kita masih jalan di tempat.
+
+         Yang lebih parah, sekolah negeri pun tidak benar-benar gratis. Ada saja pungutan, dari seragam, buku, study tour, hingga acara-acara sekolah yang sebenarnya tidak wajib tetapi dipaksa ikut. Buku yang dibeli pun rata-rata tebal, mahal, tetapi jarang dibaca. Mana mungkin anak-anak dengan minat baca rendah sanggup menyelesaikan buku setebal 300 halaman? Akhirnya buku hanya jadi beban tas, jadi dekorasi rak, atau jadi bahan daur ulang. Jadi, sekolah bukan lagi tempat mencari ilmu, melainkan tempat mewariskan beban ekonomi dan psikologis.
+
+         Bagaimana dengan sekolah ketiga, yaitu kuliah? Lebih fantastis lagi. Kalau di sekolah anak-anak dijejali 10–20 mata pelajaran, di bangku kuliah mahasiswa harus menghadapi 40–50 mata kuliah. Biaya kuliah terlampau mahal, apalagi di perguruan tinggi negeri yang diam-diam berubah menjadi korporasi. Uang Kuliah Tunggal (UKT), biaya praktikum, biaya buku, biaya tak kasat mata—semuanya menumpuk. Tetapi hasilnya? Belum tentu sepadan. Banyak sarjana menganggur, banyak pula yang akhirnya bekerja di bidang yang tidak ada kaitannya sama sekali dengan jurusannya. Jadi, untuk apa mahasiswa dipaksa menghabiskan empat tahun, puluhan juta rupiah, dan tenaga untuk kuliah kalau hasilnya nihil?
+
+         Lalu kita bicara soal kualitas tenaga pengajar. Tidak bisa dipungkiri, masih banyak guru di Indonesia yang belum sarjana. Yang sudah sarjana pun sering terasa seperti tidak pernah sarjana, karena metode mengajarnya monoton. Ceramah, catat, hafalkan. Bahkan ada yang jadi guru bukan karena kompetensi, tapi karena ordal—orang dalam. Akibatnya, anak-anak diajar oleh orang yang tidak benar-benar paham cara mendidik. Hal yang sama terjadi di perguruan tinggi. Banyak dosen merasa cukup dengan metode presentasi-ceramah, tanpa mencoba inovasi baru. Seakan-akan, dulu mereka tidak pernah diajari pedagogi modern. Padahal, belajar itu bisa menyenangkan kalau dikemas dengan kreatif.
+
+         Masalahnya tidak berhenti di situ. Pendidikan di Indonesia terlalu sering dijadikan mesin ekonomi. Sekolah-sekolah swasta menjual gengsi dengan harga selangit, kampus-kampus negeri memungut biaya mahal dengan alasan kualitas, sementara fasilitas yang diberikan sering tidak sebanding. Gedung kampus bisa megah, tetapi wifi lemot, AC mati, toilet kotor. Anak-anak dipaksa bayar buku paket, tetapi dosennya tetap memberi materi seadanya. Akhirnya, pendidikan tidak lagi soal ilmu, tetapi soal siapa yang mampu membayar lebih banyak.
+
+         Kalau kita bandingkan dengan negara lain, perbedaannya mencolok. Finlandia memastikan semua guru memiliki gelar master dan melalui seleksi ketat. Jepang menjadikan etika sebagai fondasi pendidikan. Sementara kita? Sibuk gonta-ganti kurikulum tiap ganti menteri, sibuk bikin jargon “Merdeka Belajar” tetapi praktiknya justru menambah administrasi. Kita mengaku ingin mencetak generasi unggul, tetapi kenyataannya hanya mencetak generasi lelah.
+
+         Pertanyaan awal tadi pun kembali: sebenarnya, pendidikan itu tujuannya untuk apa? Kalau memang untuk membentuk manusia seutuhnya, kenapa kita malah sibuk mengejar angka di rapor dan ijazah? Kalau memang untuk mencetak generasi unggul, kenapa justru banyak generasi muda yang stres, depresi, bahkan putus asa hingga memilih mengakhiri hidup? Kalau memang pendidikan adalah jalan menuju masa depan, kenapa banyak lulusan justru kebingungan menghadapi dunia kerja?
+
+         Mungkin jawabannya sederhana tapi pahit: sistem pendidikan di Indonesia saat ini lebih banyak dijalankan demi administrasi dan ekonomi ketimbang demi manusia. Pendidikan jadi ajang bisnis, jadi ajang politik, jadi ajang pencitraan. Anak-anak, siswa, mahasiswa hanyalah korban eksperimen yang terus berganti kurikulum.
+
+         Seharusnya, pendidikan itu memanusiakan manusia. Anak-anak tidak boleh kehilangan masa kecilnya hanya karena PR. Mahasiswa tidak boleh kehilangan masa mudanya hanya karena puluhan mata kuliah yang tidak relevan. Guru dan dosen seharusnya menjadi teladan, bukan sekadar penyampai materi. Pendidikan harusnya membentuk adab, karakter, dan kebijaksanaan—bukan sekadar hafalan yang dilupakan setelah ujian selesai.
+
+         Sampai pertanyaan ini terjawab dengan jujur, pendidikan di Indonesia akan tetap berada di lingkaran setan. Dan kita akan terus bertanya: apakah pendidikan ini benar-benar untuk manusia, atau hanya untuk sistem itu sendiri? 
+ `},
+         {id: 10, title: 'Skripsi', meta: 'Bab 10', content: `
+         
+         Setiap tahunnya, puluhan bahkan ratusan ribu mahasiswa di Indonesia melahirkan skripsi. Tugas akhir ini sudah seperti ritual tahunan yang tak bisa dihindari, sebuah syarat mutlak untuk bisa menyandang gelar sarjana. Namun, pertanyaan mendasar yang jarang diajukan adalah: apa sebenarnya urgensi skripsi itu? Seberapa besar dampaknya terhadap masyarakat luas? Ataukah skripsi hanyalah sebuah tradisi akademik yang dipaksakan terus-menerus tanpa refleksi?
+
+         Dalam teori, skripsi dibuat agar mahasiswa mampu meneliti, mengkaji, dan menghasilkan sebuah karya ilmiah yang bisa berguna bagi masyarakat. Mahasiswa semester akhir didorong untuk mencari topik yang “relate” dengan kondisi sosial di sekitarnya. Katanya, agar skripsi tersebut tidak sekadar formalitas, melainkan benar-benar menjadi sumbangsih nyata. Tetapi jika benar demikian, seharusnya ratusan ribu skripsi yang lahir tiap tahun sudah mampu mengubah wajah bangsa ini menjadi lebih baik. Jalanan harusnya lebih mulus, pendidikan lebih efektif, pelayanan publik lebih manusiawi, lingkungan lebih terjaga, dan tata kelola pemerintahan lebih rapi. Nyatanya, skripsi justru menumpuk di rak perpustakaan kampus, berdebu, atau hanya menjadi file yang terlupakan di database fakultas.
+
+         Fenomena ini menunjukkan adanya kesenjangan besar antara idealisme dan realitas. Dalam praktiknya, skripsi lebih sering diperlakukan sebagai syarat administratif ketimbang karya intelektual yang berpengaruh. Mahasiswa dipaksa untuk menulis, meneliti, dan mematuhi aturan baku akademik, tapi hasil akhirnya jarang benar-benar diaplikasikan. Bahkan banyak skripsi yang hanya dibaca oleh dua pihak: mahasiswa pembuatnya dan dosen penguji. Setelah sidang usai, skripsi tersebut lenyap dari perbincangan, seolah-olah ia hanya lahir untuk mati di arsip.
+
+         Mengapa syarat kelulusan mahasiswa harus berbentuk skripsi? Bukankah selama empat tahun mahasiswa sudah menempuh berbagai mata kuliah, mengerjakan puluhan tugas, menyelesaikan praktik lapangan, magang, atau proyek kelompok yang lebih nyata aplikasinya? Apakah semua itu belum cukup untuk membuktikan kompetensi seorang sarjana? Pertanyaan ini menggelitik, karena tidak semua mahasiswa punya cita-cita menjadi peneliti. Ada yang ingin terjun ke dunia industri, ada yang memilih jalur wirausaha, ada yang menekuni dunia seni, bahkan ada yang lebih tertarik pada aktivisme sosial. Namun sistem pendidikan kita memaksa seluruh mahasiswa untuk melewati jalan yang sama: menulis skripsi. Seakan-akan menjadi sarjana identik dengan menjadi peneliti, padahal kenyataannya hanya sebagian kecil lulusan S1 yang benar-benar melanjutkan ke dunia akademik.
+
+         Skripsi kemudian menjelma menjadi sebuah mitos akademik. Ia digadang-gadang sebagai bentuk kontribusi mahasiswa pada masyarakat. Akan tetapi, manfaat sosialnya sering kali hanya sebatas klaim di latar belakang penelitian. Hampir setiap skripsi berisi kalimat yang berbunyi “penelitian ini diharapkan dapat memberikan manfaat bagi masyarakat.” Namun ketika ditelisik lebih jauh, siapa yang benar-benar menikmati manfaat tersebut? Hanya segelintir penelitian yang diadopsi oleh lembaga, pemerintah, atau industri. Sisanya berhenti di lembar pengesahan.
+
+         Ironi ini semakin jelas ketika kita melihat bagaimana proses skripsi dijalankan. Mahasiswa kerap dibombardir dengan revisi tanpa henti, pertanyaan-pertanyaan dosen penguji yang kadang tidak relevan, bahkan komentar-komentar yang lebih bersifat menjatuhkan daripada membimbing. Draf skripsi bolak-balik dicetak, dicoret, direvisi, lalu dicetak lagi. Lembar-lembar kertas berserakan, tinta printer habis, biaya cetak membengkak. Semua ini berasal dari kantong mahasiswa, yang sebagian besar bukan dari kalangan mampu. Di balik setiap skripsi, ada ratusan ribu rupiah yang dikorbankan hanya untuk membeli kertas, tinta, dan jasa jilid. Belum lagi jika dihitung secara ekologis: betapa banyak pohon yang ditebang untuk mencetak karya yang pada akhirnya hanya tersimpan di rak.
+
+         Skripsi juga memunculkan problem serius dalam relasi mahasiswa dengan dosen pembimbing. Idealnya, dosen menjadi penuntun yang sabar, memberi arahan yang jelas, serta mendukung mahasiswa agar bisa mengembangkan ide. Namun realitasnya, tidak sedikit dosen yang bersikap semaunya sendiri: sulit dihubungi, lamban memberi feedback, atau bahkan cenderung abai. Mahasiswa sering kali menunggu berminggu-minggu hanya untuk menerima komentar singkat yang kadang tidak membangun. Keterlambatan, ketidakjelasan, dan ketidakpedulian ini menambah tekanan psikologis. Tak heran jika banyak mahasiswa kemudian menyerah dan memilih jalan pintas: menyewa jasa joki, membeli skripsi instan, atau memanipulasi data. Praktik ini tentu saja melanggar etika akademik, tetapi bukankah sistem yang semrawut juga turut menyuburkan lahirnya kecurangan?
+
+         Skripsi akhirnya lebih mirip dengan ujian ketahanan mental daripada proses ilmiah. Bukan hanya beban akademik, tetapi juga beban ekonomi, beban ekologi, dan beban psikologis. Banyak mahasiswa yang merasa terbebani bukan karena tidak mampu menulis, tetapi karena sistemnya sendiri terlalu ribet dan tidak relevan. Mereka yang sejak awal bersemangat melakukan penelitian pun sering kehilangan motivasi karena birokrasi kampus yang berbelit-belit.
+
+         Jika demikian, apakah masih relevan mempertahankan skripsi sebagai syarat tunggal kelulusan? Bukankah lebih baik jika sistem pendidikan tinggi memberi fleksibilitas? Ada banyak cara lain yang mungkin lebih bermakna untuk menguji kemampuan mahasiswa. Misalnya, proyek akhir yang berbasis karya nyata. Mahasiswa teknik bisa diminta membuat prototipe, mahasiswa komputer bisa mengembangkan aplikasi, mahasiswa seni bisa menghasilkan karya kreatif, mahasiswa pendidikan bisa menyusun kurikulum inovatif. Semua itu lebih mudah diaplikasikan ketimbang laporan penelitian formal yang akhirnya hanya berakhir di rak.
+
+         Alternatif lain adalah magang panjang. Mahasiswa hukum, misalnya, bisa lulus dengan menyelesaikan magang di firma hukum sambil menangani kasus nyata. Mahasiswa kedokteran masyarakat bisa terjun langsung ke puskesmas dan mendampingi warga dalam program kesehatan. Mahasiswa ilmu sosial bisa bekerja bersama LSM dan menghasilkan laporan advokasi yang nyata dampaknya. Bentuk ujian kelulusan semacam ini tidak hanya menguji pengetahuan, tetapi juga keterampilan praktis yang dibutuhkan di dunia kerja.
+
+         Ada pula opsi portofolio. Mahasiswa jurnalistik atau komunikasi bisa lulus dengan menulis serangkaian artikel yang dipublikasikan, mahasiswa desain bisa meluluskan diri dengan karya visual yang diakui, mahasiswa seni bisa menunjukkan rekam jejak pertunjukan atau pameran. Dengan begitu, karya mahasiswa tidak hanya bermanfaat bagi dirinya, tetapi juga bisa diapresiasi masyarakat luas.
+
+         Bahkan ujian komprehensif pun bisa menjadi alternatif yang masuk akal. Mahasiswa diuji secara menyeluruh tentang pemahaman ilmu yang sudah mereka pelajari empat tahun. Ujian ini bisa berbentuk tertulis, lisan, atau kombinasi keduanya. Tujuannya bukan untuk menciptakan penelitian baru, melainkan untuk memastikan mahasiswa benar-benar menguasai dasar-dasar keilmuannya. Cara ini justru lebih jujur, karena menguji pengetahuan apa adanya tanpa harus melalui ritual panjang skripsi.
+
+         Jika pendidikan tinggi bertujuan mencetak manusia yang siap menghadapi kehidupan, maka skripsi tidak boleh dianggap sebagai jalan tunggal. Skripsi hanyalah salah satu bentuk pembuktian akademik, bukan satu-satunya. Pendidikan seharusnya lebih adaptif, memberi ruang pada keragaman minat, bakat, dan cita-cita mahasiswa. Memaksa semua orang melewati skripsi justru mereduksi makna pendidikan itu sendiri.
+
+         Kesimpulannya, urgensi skripsi sudah banyak kehilangan relevansinya di tengah perubahan zaman. Ia lebih mirip dengan mitos yang dipertahankan atas nama tradisi akademik daripada kebutuhan nyata. Jika benar pendidikan harus memberi manfaat bagi masyarakat, mungkin sudah saatnya kita bertanya ulang: apakah menulis skripsi lebih bermanfaat, atau justru menciptakan sistem baru yang membuat mahasiswa benar-benar berkontribusi langsung pada lingkungannya?
+
+         Skripsi mungkin masih berguna untuk sebagian orang yang memang ingin menjadi peneliti. Tetapi untuk yang lain, ia hanyalah formalitas yang menguras tenaga, biaya, dan pikiran. Oleh karena itu, skripsi tidak semestinya menjadi kewajiban mutlak. Sudah waktunya pendidikan tinggi di Indonesia berani membuka jalan baru: memberi pilihan, bukan memaksa. Karena tujuan akhir kuliah bukan sekadar melahirkan skripsi, melainkan melahirkan manusia yang benar-benar siap hidup, bekerja, dan berkarya untuk masyarakat. 
+`},
+         {id: 10, title: 'Tabir Gelap Mahasiswa', meta: 'Bab 11', content: `
+         Perkuliahan sering dipromosikan sebagai fase paling indah dalam hidup. Orang-orang bilang, masa kuliah adalah masa keemasan: penuh kebebasan, kesempatan, dan pengalaman baru. Apalagi bagi mereka yang merantau, meninggalkan rumah, keluarga, dan pengawasan orang tua. Hidup seakan baru dimulai, dan pintu kebebasan terbuka selebar-lebarnya. Tidak ada lagi guru yang cerewet, tidak ada lagi wali kelas yang memantau, tidak ada lagi orang tua yang setiap hari mengatur. Yang tersisa hanyalah pesan-pesan singkat lewat chat: “jangan lupa makan,” “jaga kesehatan,” atau “hati-hati di jalan.”
+
+         Namun justru di sinilah tabir gelap kehidupan perlahan tersingkap. Kebebasan bukan hanya berarti keleluasaan untuk memilih jalan hidup, tetapi juga undangan terbuka untuk segala macam godaan. Mahasiswa sering kali tidak menyadari bahwa di balik pintu kebebasan itu, ada jurang-jurang yang siap menelan mereka kapan saja.
+
+         Senioritas misalnya. Budaya ini sebenarnya sudah dikenali sejak sekolah. Tetapi di kampus, bentuknya lebih membabi buta. Dulu, di sekolah, ada guru yang bisa menengahi. Ada orang tua yang bisa mengadu. Namun di kampus, pengawasan tidak seketat itu. Senior punya ruang lebih luas untuk mendominasi junior. Kadang, senioritas hanya sebatas formalitas ospek. Tetapi tidak jarang, ia berkembang menjadi bentuk kekuasaan terselubung: pemerasan, perintah yang absurd, bahkan pelecehan. Junior yang takut dicap “tidak solid” sering memilih diam, padahal mereka sedang dipermainkan.
+
+         Lalu ada soal pergaulan bebas. Ini topik yang sering dihindari, tapi realitasnya tidak bisa dipungkiri. Pacaran di kampus bukan lagi hal tabu. Setiap sudut taman, lorong fakultas, kantin, hingga pojokan perpustakaan penuh dengan pasangan yang seakan hidup di dunia mereka sendiri. Mahasiswa yang tidak punya pasangan sering kali dilanda rasa sepi, apalagi jika mereka baru merantau dan tidak punya lingkar pertemanan yang kuat. Loneliness ini membuat godaan pacaran terasa lebih menggoda. Tidak sedikit yang akhirnya terjerumus lebih jauh: hubungan seks di luar nikah menjadi rahasia umum, kehamilan tidak diinginkan terjadi di balik kamar kos, bahkan aborsi ilegal dilakukan secara sembunyi-sembunyi. Semua itu jarang dibicarakan terbuka, tetapi denyutnya nyata di kehidupan mahasiswa.
+
+         Lebih mengerikan lagi ketika berbicara soal obat-obatan. Mahasiswa sering menjadi target empuk bagi pengedar. Anak muda, jauh dari orang tua, punya uang bulanan, dan sedang mencari identitas—ini kombinasi sempurna untuk dimanfaatkan. Ada yang mulai dari sekadar rokok elektrik, lalu berlanjut ke ganja, pil ekstasi, bahkan sabu. Beberapa resto atau pedagang kaki lima secara tidak sadar ikut menyebarkan, entah lewat racikan, makanan, atau jaringan terselubung. Mahasiswa awam yang tidak paham tentang narkoba bisa saja terjerumus tanpa sadar.
+
+         Minuman keras pun sudah bukan hal asing. Alasan klasiknya: untuk senang-senang, melupakan stres, atau sekadar ikut-ikutan teman. Di balik botol itu, mereka merasa lebih bebas, lebih lepas, lebih berani. Diskotik, bar, karaoke malam—semua menjadi bagian dari gaya hidup baru. Bagi sebagian mahasiswa, dunia malam bukan lagi sesuatu yang menakutkan, melainkan panggung untuk menunjukkan eksistensi. Mereka datang, menari, tertawa, pulang pagi dengan mabuk, lalu melanjutkan kuliah seolah tidak terjadi apa-apa.
+
+         Namun, di balik semua itu, sistem kampus sendiri kadang memperparah luka. Mahasiswa sering merasa dipermainkan oleh birokrasi yang rumit, pungutan liar yang dibungkus rapi, hingga kewajiban-kewajiban aneh yang terasa seperti pemerasan terselubung. Seminar wajib dengan biaya tinggi, kegiatan kampus yang katanya “untuk pengembangan diri” tetapi lebih terasa sebagai formalitas yang memberatkan. Perlahan, mahasiswa sadar bahwa mereka bukan hanya menuntut ilmu, tetapi juga menjadi konsumen dalam industri pendidikan.
+
+         Pertemanan yang semula dianggap tulus pun ternyata penuh topeng. Di awal kuliah, semua terlihat akrab, solid, dan penuh kekeluargaan. Tetapi seiring waktu, pisau-pisau mulai terlihat disembunyikan di balik punggung. Ada teman yang tega menjatuhkan demi nilai, ada yang menikam demi jabatan organisasi, ada pula yang hanya berteman saat butuh. Mahasiswa belajar pahitnya hidup: tidak semua orang tulus, dan dunia kampus hanyalah miniatur kerasnya dunia nyata.
+
+         Bagi mereka yang kaya, kehidupan kuliah adalah pesta panjang. Nongkrong di kafe mahal, liburan ke luar kota, barang branded, ponsel terbaru, dan mobil mewah jadi hal lumrah. Mereka menikmati masa muda dengan hura-hura, kadang tanpa peduli pada nilai kuliah sekalipun. Sebaliknya, mahasiswa miskin sering terhimpit. Demi gengsi, mereka memaksakan diri ikut arus: beli kopi mahal meski harus ngutang, ikut liburan meski uang bulanan habis, memamerkan gaya hidup media sosial meski itu bukan realitas mereka. Tekanan sosial ini kejam, membuat banyak mahasiswa hidup dalam kepura-puraan.
+
+         Loneliness lalu menjadi hantu yang menghantui banyak mahasiswa. Di tengah keramaian kampus, konser, pesta, atau tawa di kafe, banyak mahasiswa sebenarnya merasa kosong. Mereka terjebak dalam rutinitas, kehilangan arah, dan tidak tahu apa tujuan hidupnya. Rasa sepi ini sering ditutupi dengan pacaran, mabuk, atau pesta, tetapi setelah itu semua selesai, kehampaan kembali datang. Inilah yang membuat mahasiswa rentan terhadap depresi, kecemasan, bahkan pikiran untuk mengakhiri hidup.
+
+         Padahal, mahasiswa sering dielu-elukan sebagai “agen perubahan,” “kekuatan moral bangsa,” atau “pemimpin masa depan.” Tetapi di balik slogan itu, realitasnya jauh lebih rumit. Mereka memang sedang tumbuh, sedang mencari identitas, sedang belajar menghadapi hidup. Kampus hanya memberi sebagian kecil bekal akademik, tetapi tidak selalu memberi perlindungan atau ruang aman untuk menghadapi realita pahit.
+
+         Semua fenomena ini memperlihatkan bahwa perkuliahan bukan hanya soal belajar di kelas, mengerjakan tugas, atau menulis skripsi. Ia adalah fase transisi hidup yang penuh jebakan. Mahasiswa berhadapan dengan kebebasan yang sering membutakan, pergaulan yang menggoda, sistem yang mengeksploitasi, serta pertemanan yang penuh topeng. Mereka dituntut untuk kuat, tetapi sering kali rapuh. Mereka dianggap dewasa, tetapi masih belajar menjadi manusia dewasa yang sesungguhnya.
+
+         Kehidupan mahasiswa adalah cermin dari kehidupan masyarakat yang lebih luas. Jika mahasiswa rentan terhadap narkoba, pergaulan bebas, dan hedonisme, itu bukan semata-mata kesalahan individu. Itu adalah refleksi dari sistem sosial yang bobrok, dari pendidikan yang hanya mengejar angka, dari keluarga yang gagal memberi fondasi, dari negara yang abai menyediakan ruang aman bagi anak mudanya.
+
+         Pada akhirnya, mahasiswa harus belajar memilah jalan. Kebebasan memang ada di tangan mereka, tetapi kebebasan tanpa kendali hanya akan membawa pada kehancuran. Tabir gelap kehidupan mahasiswa tidak akan hilang, tetapi ia bisa diterangi dengan kesadaran, solidaritas, dan keberanian untuk melawan arus. Kampus seharusnya tidak hanya menjadi tempat menimbun teori, tetapi juga ruang aman untuk tumbuh sebagai manusia.
+
+         Namun untuk saat ini, realitasnya jelas: masa kuliah bukan hanya masa indah penuh kebebasan, tetapi juga masa rawan, penuh jebakan, dan sering kali kejam. Mahasiswa tidak hanya sedang belajar ilmu, mereka sedang diuji oleh kehidupan itu sendiri.
+ `},
+{id: 12, title: 'Mahasiswa', meta: 'Bab 12', content: `
+ Mahasiswa adalah sebuah fase hidup yang pelik. Fase ini tidak hanya tentang mengejar gelar, bukan semata urusan tugas, kelas, atau skripsi. Ia adalah pertaruhan hidup yang berat, sebuah perjalanan penuh luka dan pengorbanan. Bagi banyak orang, terutama dari keluarga kelas menengah ke bawah, kuliah adalah taruhan paling ekstrem yang pernah dijalani. Jika berhasil, dunia akan terbuka, kebanggaan keluarga terjaga, dan jalan hidup akan lebih lapang. Namun jika gagal, semuanya bisa runtuh. Pengorbanan orang tua terbuang sia-sia, tabungan keluarga habis, harapan kampung halaman hancur. Tak ada ruang untuk mengulang dari awal. “Sukses atau tidak sama sekali”—itulah kalimat yang terus bergaung di dalam kepala, menjadi beban yang menindih pundak si perantau muda.
+
+ Ia berangkat dari kampung halaman dengan hati yang berat. Di desa atau kota kecil tempatnya lahir, hampir setiap sudut punya kenangan: tawa di lapangan, obrolan hangat dengan tetangga, aroma masakan ibu, sapaan akrab orang-orang yang mengenalnya sejak kecil. Semua itu adalah pelukan tak kasat mata yang menahan langkahnya. Namun kehidupan tidak memberinya pilihan selain melangkah pergi. Di stasiun, terminal, atau bandara, air mata ibunya pecah, tangisnya seperti doa yang merobek langit. Setiap langkah menjauh adalah siksaan. Si anak ingin berbalik, ingin memeluk lebih lama, tapi ia tahu ia harus maju. Tak ada seorang anak pun yang sepenuhnya rela meninggalkan tanah tempat ia bertumbuh. Tetapi begitulah hidup: ia menuntut keberanian untuk meninggalkan zona nyaman.
+
+ Sesampainya di kota orang, dunia terasa asing. Segala sesuatu harus dimulai dari nol: cara hidup, cara berteman, cara bertahan. Di kampung halaman, ada rumah yang selalu terbuka, ada ibu yang selalu siap mendekap saat resah, ada ayah yang siap menasehati saat ia salah. Di perantauan, semua itu hilang. Yang tersisa hanya ruang kos sempit, uang bulanan yang harus diatur sehemat mungkin, dan hari-hari panjang yang harus dihadapi sendirian. Kehidupan kini berganti genre: dari kehangatan menjadi perjuangan survival.
+
+ Harapan besar pada kampus yang dulu tampak menjanjikan sering kali tidak seindah kenyataan. Mahasiswa bertanya pada dirinya sendiri: “Apakah aku salah memilih kampus? Mengapa dosen-dosen terasa jauh? Mengapa birokrasi begitu membingungkan? Mengapa aku merasa sendirian di sini?” Pertanyaan-pertanyaan itu menjadi bisikan setan yang menusuk setiap malam. Sulit mencari tangan yang benar-benar terbuka, sulit menemukan lingkaran yang tulus. Ia harus menelusuri lorong kehidupan mahasiswa sendirian, dengan segala manis-pahitnya. Dan ia tahu satu hal: tidak ada jalan untuk kembali. Menyerah sama artinya dengan selesai, bahkan mati.
+
+ Setiap kali ingin menyerah, wajah orang tuanya kembali muncul. Wajah-wajah yang menua, tubuh yang lelah, namun tetap memaksakan diri bekerja demi anaknya. Mereka rela menahan lapar, rela berhutang, rela menahan malu, demi melihat anaknya duduk di bangku kuliah. Kesadaran itu menjadi cambuk, menyadarkannya bahwa ia tidak boleh kalah. Ia mungkin boleh menangis, boleh rapuh, tetapi tidak boleh berhenti. Karena yang ia bawa bukan hanya dirinya sendiri, melainkan juga harapan besar sebuah keluarga, bahkan kampung halaman.
+
+ Namun, perjuangan itu bukan tanpa luka. Setiap hari ia harus bergulat dengan kesepian. Malam-malam panjang di kamar kos sering dipenuhi rasa bersalah, rasa menyesal, rasa takut gagal. Ia belajar menahan lapar demi menghemat uang, belajar menahan iri ketika melihat teman-teman bergelimang fasilitas, belajar tersenyum meski hati porak-poranda. Ia dipaksa dewasa lebih cepat dari yang seharusnya.
+
+ Kadang ia terjatuh. Nilai yang buruk, uang yang menipis, teman yang berkhianat, cinta yang kandas—semuanya menusuk tanpa ampun. Kadang ia hilang arah, tidak tahu untuk apa ia di kota ini, tidak tahu apa arti semua pengorbanan ini. Kadang ia terluka, oleh kata-kata, oleh sikap orang, oleh sistem yang tidak adil. Kadang ia berduka, merasakan kehilangan yang tidak bisa ia ceritakan kepada siapa pun. Tetapi satu hal yang tidak pernah ia lakukan: menyerah.
+
+ Ia tahu ia mungkin tidak akan pernah benar-benar sempurna. Ia tidak tahu apakah masa depannya akan gemilang. Ia hanya tahu satu hal: ia tidak boleh mengecewakan kampung halamannya. Ia adalah api harapan, bukan hanya untuk keluarganya, tetapi untuk orang-orang yang percaya padanya. Ia membawa nama keluarga, doa ibu, dan titipan masyarakat kecil yang berharap kelak anak itu bisa menjadi cahaya.
+
+ Semakin jauh perjalanan, semakin berat beban. Ketakutan selalu membayangi: takut gagal, takut jatuh, takut tidak bisa kembali dengan kepala tegak. Namun, di balik semua itu, ia terus belajar untuk percaya. Percaya bahwa perjuangan tidak akan sia-sia. Percaya bahwa setiap tetes air mata dan peluh akan ada balasannya. Percaya bahwa ada doa-doa yang melindunginya di langit sana.
+
+ Karena pada akhirnya, apa pun hasilnya, sukses atau tidak, ia tetaplah anak kebanggaan bagi kedua orang tuanya. Seorang anak yang berani melangkah, berani meninggalkan kenyamanan demi masa depan. Seorang anak yang pernah berjuang sekuat tenaga, meski dunia seakan bersekongkol untuk menjatuhkannya.
+
+ Mahasiswa bukan hanya gelar akademik. Ia adalah simbol dari keberanian meninggalkan rumah untuk mencari masa depan. Ia adalah luka, air mata, sepi, dan rindu yang ditanggung sendirian. Ia adalah mimpi yang diperjuangkan dengan darah dan keringat. Dan pada akhirnya, ia adalah harapan yang tak pernah padam—harapan bahwa pulang nanti akan ada senyum, pelukan, dan kebanggaan yang menunggu. 
+ 
+ `},
+                     // ... Tambahkan bab-bab lainnya di sini dengan format yang sama
+            {id: 13, title: 'Epilog', meta: 'Bab 13', content: `
+            Mahasiswa, sejak awal sudah kita lukiskan sebagai generasi yang penuh luka. Dari Gen Z yang disalahpahami, dipaksa menyesuaikan diri dengan dunia yang kaku, hingga mahasiswa yang setiap harinya berjuang dalam sistem perkuliahan yang absurd, dosen yang arogan, organisasi yang kehilangan arah, relasi yang timpang, birokrasi yang berbelit, sampai pada akhir tragis bernama skripsi. Semua itu telah kita kritik, kita bongkar, kita cabik, hingga tampak betapa suramnya wajah pendidikan kita. Namun di balik semua itu, ada satu hal yang tidak boleh hilang: harapan. Kritik yang kita lontarkan sejak awal bukanlah tanda kebencian. Ia justru lahir dari cinta. Kita marah karena kita peduli. Kita kecewa karena kita berharap. Dan kita menggugat karena kita masih percaya bahwa semuanya bisa berubah.
+
+            Harapan itu tidak datang dari ruang-ruang birokrasi kampus, bukan pula dari para dosen yang sering kali abai, apalagi dari sistem pendidikan yang lebih sibuk menghitung angka ketimbang menumbuhkan manusia. Harapan itu lahir dari mahasiswa itu sendiri. Dari setiap anak muda yang berani meninggalkan kampung halaman demi sebuah masa depan. Dari mereka yang menanggung beban keluarga, beban doa, dan beban mimpi yang terlalu besar untuk dipikul sendirian. Dari wajah-wajah yang menahan lapar di kosan sempit, dari air mata yang jatuh diam-diam di malam hari, dari tawa yang dipaksakan di tengah kelelahan, dari langkah-langkah kecil yang terus maju meski dunia terasa melawan.
+
+            Setiap kritik yang kita lontarkan tentang Gen Z, pada akhirnya justru menyingkap sebuah kekuatan yang tersembunyi: fleksibilitas mereka. Gen Z mungkin sering dicap generasi stroberi, rapuh, gampang sakit hati. Namun justru di situlah letak keindahannya. Mereka peka, mereka sadar, mereka berani mempertanyakan. Sensitivitas yang sering dianggap kelemahan, sebenarnya adalah kekuatan untuk melihat luka yang disembunyikan dunia. Jika generasi sebelumnya dipaksa untuk keras demi bertahan dari perang, Gen Z dipaksa untuk lentur demi bertahan dari derasnya arus globalisasi. Mereka tidak tunduk begitu saja. Mereka memilih, memilah, meramu, dan mencipta. Di situlah harapan baru tumbuh: generasi ini tidak akan sekadar menelan tradisi lama, tapi menenunnya ulang agar lebih manusiawi.
+
+            Dan mahasiswa, yang lahir dari rahim Gen Z, adalah bukti nyata. Ya, mereka memang sering terjebak dalam sistem yang absurd—40 mata kuliah yang tumpang tindih, dosen yang tak peduli, birokrasi yang ribet, organisasi yang cuma jadi ajang senioritas, relasi yang timpang, bahkan skripsi yang hanya menjadi omong kosong dalam arsip kampus. Namun meski semua itu menghantam, mereka tidak pernah benar-benar menyerah. Mereka tetap hadir di kelas, meski sering bosan. Mereka tetap mengerjakan tugas, meski kadang hanya copy-paste. Mereka tetap menulis skripsi, meski tahu hasilnya akan berdebu di perpustakaan. Mengapa? Karena mereka sadar, di balik semua absurditas itu ada satu alasan yang tak tergantikan: keluarga, kampung halaman, dan masa depan.
+
+            Mahasiswa adalah pejalan yang membawa api harapan. Api itu kadang kecil, nyaris padam, tertiup angin kencang dari sistem yang bobrok. Namun api kecil itu tetap menyala. Ia bertahan di tengah badai. Ia hidup dalam kegelapan. Dan api itu, sekecil apa pun, cukup untuk memberi cahaya bagi keluarga yang menunggu di rumah.
+
+            Mari kita lihat mahasiswa yang merantau. Ia meninggalkan desa dengan berat hati, diiringi tangisan ibunya, doa bapaknya, dan lambaian tangan tetangganya. Ia sampai di kota dengan tas seadanya, uang pas-pasan, dan hati yang penuh harap. Hari-harinya sunyi di kos sempit, makan seadanya, belajar dalam kesepian. Ia tertawa bersama teman-teman, tetapi di balik itu ada rasa lapar yang disembunyikan. Ia ikut rapat organisasi, tetapi kadang hanya untuk mengisi waktu agar tidak merasa sendiri. Ia jatuh cinta, patah hati, lalu bangkit lagi. Ia jatuh dalam tugas, gagal dalam ujian, lalu mencoba lagi. Ia menangis, lalu tersenyum, lalu kembali berjalan. Semua itu adalah latihan hidup, bukan sekadar latihan akademik.
+
+            Kita sering mengecam dosen yang arogan, birokrasi yang lambat, organisasi yang sia-sia, relasi yang tidak adil. Dan ya, semua itu nyata adanya. Tapi mari kita lihat dari sisi lain: di tengah semua itu, mahasiswa sedang ditempa. Mereka belajar bertahan hidup. Mereka belajar mencari jalan alternatif. Mereka belajar bahwa dunia tidak adil, dan karena itu mereka harus memperjuangkan keadilan. Mereka belajar bahwa relasi memang penting, tetapi integritas lebih penting. Mereka belajar bahwa birokrasi bisa mengekang, tetapi kreativitas bisa membebaskan. Mereka belajar bahwa dosen bisa lalai, tetapi ilmu bisa dicari di luar kelas. Mereka belajar bahwa organisasi bisa toksik, tetapi komunitas yang sehat bisa diciptakan dari nol.
+
+            Bukankah itu yang membuat mahasiswa unik? Mereka bukan hanya penerima ilmu, mereka adalah pencipta jalan. Mereka bukan hanya penonton, mereka adalah aktor. Dan meski sering tersandung, meski sering jatuh, mereka selalu bangkit. Karena mereka tahu, menyerah bukanlah pilihan.
+
+            Kita bicara soal skripsi. Berapa banyak mahasiswa yang merasa tersiksa karenanya? Berapa banyak yang mengeluh, stres, bahkan putus asa? Namun mari kita lihat sisi lain. Skripsi mungkin absurd, sering hanya formalitas, tetapi ia juga bukti kesabaran. Skripsi adalah latihan terakhir: bagaimana bertahan dalam proses panjang, bagaimana menata pikiran, bagaimana menuntaskan sesuatu meski terasa sia-sia. Skripsi bukan sekadar lembaran kertas. Ia adalah simbol bahwa mahasiswa bisa menyelesaikan sesuatu yang berat, meski tidak sempurna. Dan simbol itu akan menjadi bekal berharga di luar kampus nanti.
+
+            Mahasiswa sering merasa hidupnya penuh kegelapan: tekanan tugas, ketidakpedulian dosen, beban keluarga, kesepian merantau, godaan pergaulan bebas, narkoba, alkohol, hedonisme. Semua itu nyata. Tapi mari kita jujur: dari kegelapan itulah lahir cahaya. Dari tekanan itulah lahir daya tahan. Dari kesepian itulah lahir kemandirian. Dari kegagalan itulah lahir kebijaksanaan. Dan dari luka itulah lahir empati.
+
+            Generasi ini mungkin tidak sempurna. Mereka rapuh, mereka sering goyah, mereka kadang terlalu emosional. Tapi justru di situlah letak harapannya. Dunia tidak butuh manusia yang keras dan dingin. Dunia butuh manusia yang peka, yang berani menangis, yang berani mengaku salah, yang berani mencari jalan baru. Gen Z dan mahasiswa adalah generasi itu. Mereka sedang tumbuh, sedang belajar, sedang ditempa. Dan suatu hari nanti, ketika mereka memimpin, mereka tidak akan mengulang kesalahan generasi sebelumnya. Mereka tidak akan mendidik anak-anaknya dengan cara lama. Mereka akan lebih lembut, lebih peka, lebih adil.
+
+            Setiap mahasiswa adalah doa yang berjalan. Doa ibunya yang menangis di terminal. Doa ayahnya yang berjuang mencari nafkah. Doa keluarganya yang berharap di kampung. Doa itu menyertai setiap langkahnya. Dan doa itu tidak pernah padam, meski mahasiswa itu sendiri kadang hampir menyerah.
+
+            Maka mari kita akhiri semua kritik ini dengan sebuah keyakinan: bahwa mahasiswa, meski penuh luka, adalah harapan. Bahwa Gen Z, meski sering dicemooh, adalah cahaya. Bahwa pendidikan, meski sering gagal, masih bisa diperbaiki. Dan semua itu dimulai dari keberanian anak-anak muda yang menolak menyerah.
+
+            Mahasiswa bukanlah korban. Mereka adalah pejuang. Mereka bukanlah generasi yang rapuh. Mereka adalah generasi yang peka. Mereka bukanlah generasi yang sia-sia. Mereka adalah generasi yang akan menulis ulang masa depan.
+
+            Ya, kita telah banyak mengkritik. Kita telah banyak mengecam. Tapi sekarang, mari kita percaya. Bahwa dari kampus-kampus yang penuh absurditas itu, dari kos-kosan sempit, dari air mata yang jatuh diam-diam, dari tawa yang dipaksakan, dari skripsi yang berdebu, dari pertemanan yang penuh luka—akan lahir cahaya baru. Cahaya yang akan menerangi bangsa ini.
+
+            Mahasiswa adalah api yang tidak pernah padam. Api yang kecil, rapuh, tapi terus menyala. Dan selama api itu menyala, dunia tidak akan pernah benar-benar gelap.
+
+ `}
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const state = { currentPage: 0, fontSize: 1, layout: 'double', theme: 'light', isMobile: window.innerWidth <= 768 };
+            const el = {
+                body: document.body, book: document.getElementById('book'), pageLeft: document.getElementById('page-left'), pageRight: document.getElementById('page-right'),
+                leftContent: document.getElementById('left-content'), rightContent: document.getElementById('right-content'), pageIndicator: document.getElementById('page-indicator'),
+                currentChapterTitle: document.getElementById('current-chapter-title'), tocList: document.getElementById('toc-list'), notesTitle: document.getElementById('notes-title'),
+                noteList: document.getElementById('note-list'), noteInput: document.getElementById('note-input'),
+                mobileToolbar: document.querySelector('.mobile-toolbar'), mobilePanel: document.getElementById('mobile-panel'),
+                mobilePanelTitle: document.getElementById('mobile-panel-title'), mobilePanelContent: document.getElementById('mobile-panel-content')
+            };
+            
+            function formatContentToHTML(rawText = '') {
+                if (rawText.trim().startsWith('<')) { return rawText; }
+                return rawText.trim().split(/\n\s*\n/).map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`).join('');
+            }
+
+            function renderBook() {
+                if (state.isMobile) state.layout = 'single';
+                el.book.dataset.layout = state.layout;
+
+                if (state.layout === 'single') {
+                    const currentChapter = chapters[state.currentPage] || { id: -1, meta: '', title: '', content: '' };
+                    el.rightContent.innerHTML = `<div class="meta">${currentChapter.meta}</div><div class="title">${currentChapter.title}</div>${formatContentToHTML(currentChapter.content)}`;
+                    el.leftContent.innerHTML = '';
+                    el.rightContent.classList.toggle('cover-page', currentChapter.id === 0);
+                    const displayedChapter = currentChapter;
+                    el.pageIndicator.textContent = `${displayedChapter.id || 1} / ${chapters.length - 1}`;
+                    el.currentChapterTitle.textContent = displayedChapter.title ? `${displayedChapter.meta} - ${displayedChapter.title}` : 'Sampul Depan';
+                } else {
+                    const leftPageIndex = state.currentPage;
+                    const rightPageIndex = state.currentPage + 1;
+                    const leftChapter = chapters[leftPageIndex] || { id: -1, meta: '', title: '', content: '' };
+                    const rightChapter = chapters[rightPageIndex] || { id: -1, meta: '', title: '', content: '' };
+                    el.leftContent.innerHTML = `<div class="meta">${leftChapter.meta}</div><div class="title">${leftChapter.title}</div>${formatContentToHTML(leftChapter.content)}`;
+                    el.rightContent.innerHTML = `<div class="meta">${rightChapter.meta}</div><div class="title">${rightChapter.title}</div>${formatContentToHTML(rightChapter.content)}`;
+                    el.leftContent.classList.toggle('cover-page', leftChapter.id === 0);
+                    el.rightContent.classList.toggle('cover-page', rightChapter.id === 0);
+                    const displayedChapter = rightChapter.id > 0 ? rightChapter : leftChapter;
+                    el.pageIndicator.textContent = `${displayedChapter.id || 1} / ${chapters.length - 1}`;
+                    el.currentChapterTitle.textContent = displayedChapter.title ? `${displayedChapter.meta} - ${displayedChapter.title}` : 'Sampul Depan';
+                }
+                
+                updateActiveTOC(); 
+                loadNotes();
+                el.pageLeft.classList.remove('flipped'); 
+                el.pageRight.classList.remove('flipped');
+            }
+            
+            function renderTOC(container, filter = '') {
+                container.innerHTML = '';
+                chapters.slice(1).filter(c => c.title.toLowerCase().includes(filter.toLowerCase())).forEach(chapter => {
+                    const item = document.createElement('div');
+                    item.className = 'toc-item';
+                    item.dataset.chapterIndex = chapters.indexOf(chapter);
+                    item.innerHTML = `<strong>${chapter.title}</strong><span>${chapter.meta}</span>`;
+                    container.appendChild(item);
+                });
+                updateActiveTOC();
+            }
+
+            function updateActiveTOC(){
+                document.querySelectorAll('.toc-item').forEach(item => {
+                    const chapterIndex = parseInt(item.dataset.chapterIndex);
+                    let isActive = (state.layout === 'single')
+                        ? chapterIndex === state.currentPage
+                        : (chapterIndex === state.currentPage || chapterIndex === state.currentPage + 1);
+                    item.classList.toggle('active', isActive);
+                });
+            }
+
+            function goToPage(pageIndex) {
+                const maxPage = (state.layout === 'double') ? chapters.length - 2 : chapters.length - 1;
+                const newPage = Math.max(0, Math.min(pageIndex, maxPage));
+                if (newPage !== state.currentPage) {
+                    if (state.layout === 'double' && !state.isMobile) {
+                         const direction = newPage > state.currentPage ? 'right' : 'left';
+                         if(direction === 'right') el.pageLeft.classList.add('flipped');
+                         else if(direction === 'left') el.pageRight.classList.add('flipped');
+                    }
+                    setTimeout(() => { 
+                        state.currentPage = newPage; 
+                        renderBook(); 
+                    }, (state.layout === 'double' && !state.isMobile) ? 500 : 0);
+                }
+            }
+
+            function handleTOCClick(e) {
+                const item = e.target.closest('.toc-item');
+                if (item) {
+                    let chapterIndex = parseInt(item.dataset.chapterIndex);
+                    let targetPage;
+                    if (state.layout === 'double' && !state.isMobile) {
+                        targetPage = (chapterIndex % 2 !== 0) ? chapterIndex - 1 : chapterIndex;
+                    } else {
+                        targetPage = chapterIndex;
+                    }
+                    goToPage(targetPage);
+                    if (state.isMobile) el.mobilePanel.classList.remove('active');
+                }
+            }
+            
+            function handleSettingsClick(e){
+                const action = e.target.dataset.action; if (!action) return;
+                const group = e.target.closest('.setting-group'); if (group) { group.querySelectorAll('.setting-btn').forEach(btn => btn.classList.remove('active')); e.target.classList.add('active'); }
+                const fontSizes = [0.9, 1, 1.15]; if(action === 'font-decrease') state.fontSize = Math.max(0, state.fontSize - 1); if(action === 'font-reset') state.fontSize = 1; if(action === 'font-increase') state.fontSize = Math.min(2, state.fontSize + 1);
+                if (action.startsWith('font-')) { document.querySelectorAll('.page-content').forEach(pc => pc.style.fontSize = `${fontSizes[state.fontSize]}em`); }
+                if(action.startsWith('layout-') && !state.isMobile) { state.layout = action.split('-')[1]; el.book.dataset.layout = state.layout; goToPage(0); }
+                if(action.startsWith('theme-')) { state.theme = action.split('-')[1]; el.body.classList.toggle('light-theme', state.theme === 'light'); }
+                saveSettings();
+            }
+
+            function checkMobile() {
+                state.isMobile = window.innerWidth <= 768;
+                const layoutSetting = document.querySelector('.layout-setting');
+                if(state.isMobile) {
+                    state.layout = 'single';
+                    if (layoutSetting) layoutSetting.style.display = 'none';
+                } else {
+                    if (layoutSetting) layoutSetting.style.display = 'flex';
+                }
+                renderBook();
+            }
+
+            // --- EVENT LISTENERS ---
+            function handleNav(direction) {
+                let step = (state.layout === 'double' && !state.isMobile) ? 2 : 1;
+                let newPage = (direction === 'next') ? state.currentPage + step : state.currentPage - step;
+                goToPage(newPage);
+            }
+
+            document.getElementById('prev-btn').addEventListener('click', () => handleNav('prev'));
+            document.getElementById('next-btn').addEventListener('click', () => handleNav('next'));
+            document.getElementById('mobile-prev-btn').addEventListener('click', () => handleNav('prev'));
+            document.getElementById('mobile-next-btn').addEventListener('click', () => handleNav('next'));
+
+            el.tocList.addEventListener('click', handleTOCClick);
+            document.getElementById('toc-search').addEventListener('input', (e) => renderTOC(el.tocList, e.target.value));
+            document.querySelector('.tab-buttons').addEventListener('click', (e) => { if (e.target.matches('.tab-btn')) { document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active')); e.target.classList.add('active'); document.getElementById(e.target.dataset.tab).classList.add('active'); } });
+            document.querySelector('#tab-settings').addEventListener('click', handleSettingsClick);
+            
+            document.getElementById('mobile-prev-btn').addEventListener('click', () => goToPage(state.currentPage - 1));
+            document.getElementById('mobile-next-btn').addEventListener('click', () => goToPage(state.currentPage + 1));
+
+            el.mobileToolbar.addEventListener('click', (e) => {
+                const btn = e.target.closest('.btn');
+                if(btn && btn.dataset.panel) {
+                    el.mobilePanel.classList.add('active');
+                    let contentHTML = '';
+                    switch(btn.dataset.panel) {
+                        case 'toc':
+                            el.mobilePanelTitle.textContent = 'Daftar Isi';
+                            el.mobilePanelContent.innerHTML = `<input type="search" id="mobile-toc-search" placeholder="Cari bab..."><div id="mobile-toc-list"></div>`;
+                            renderTOC(document.getElementById('mobile-toc-list'));
+                            document.getElementById('mobile-toc-list').addEventListener('click', handleTOCClick);
+                            document.getElementById('mobile-toc-search').addEventListener('input', (e) => renderTOC(document.getElementById('mobile-toc-list'), e.target.value));
+                            break;
+                        case 'notes':
+                            el.mobilePanelTitle.textContent = 'Catatan';
+                            el.mobilePanelContent.innerHTML = `<h3 style="margin:0; margin-bottom: 8px;" id="mobile-notes-title"></h3><div id="mobile-note-list" style="flex:1; overflow:auto;"></div><textarea id="mobile-note-input" placeholder="Tulis..."></textarea><button class="btn" id="mobile-save-note" style="align-self: flex-end; margin-top:8px;">Simpan</button>`;
+                            document.getElementById('mobile-notes-title').textContent = el.notesTitle.textContent;
+                            document.getElementById('mobile-note-list').innerHTML = el.noteList.innerHTML;
+                            document.getElementById('mobile-note-input').value = el.noteInput.value;
+                            document.getElementById('mobile-save-note').addEventListener('click', () => { el.noteInput.value = document.getElementById('mobile-note-input').value; document.getElementById('save-note').click(); loadNotes(); });
+                            break;
+                        case 'settings':
+                             el.mobilePanelTitle.textContent = 'Pengaturan';
+                             el.mobilePanelContent.innerHTML = document.getElementById('tab-settings').innerHTML;
+                             el.mobilePanelContent.addEventListener('click', handleSettingsClick);
+                             break;
+                    }
+                }
+            });
+            document.getElementById('close-panel-btn').addEventListener('click', () => el.mobilePanel.classList.remove('active'));
+
+            function notesKey() { return `ruangbaca_notes_ch_${state.currentPage}`; }
+            function loadNotes() {
+                const notes = JSON.parse(localStorage.getItem(notesKey()) || '[]');
+                const currentChap = chapters[state.currentPage];
+                const noteTitle = `Catatan untuk: ${currentChap?.title || 'Sampul'}`;
+                el.notesTitle.textContent = noteTitle;
+                el.noteList.innerHTML = notes.length ? '' : '<p style="color:var(--text-secondary)">Belum ada catatan.</p>';
+                notes.forEach(note => {
+                    const noteEl = document.createElement('div');
+                    noteEl.className = 'note-item';
+                    noteEl.innerHTML = `<div class="meta"><span>${new Date(note.date).toLocaleString('id-ID')}</span></div><p>${note.text.replace(/\n/g, '<br>')}</p>`;
+                    el.noteList.appendChild(noteEl);
+                });
+            }
+            document.getElementById('save-note').addEventListener('click', () => {
+                const text = el.noteInput.value.trim();
+                if (!text) return;
+                const notes = JSON.parse(localStorage.getItem(notesKey()) || '[]');
+                notes.unshift({ text, date: new Date() });
+                localStorage.setItem(notesKey(), JSON.stringify(notes));
+                el.noteInput.value = '';
+                loadNotes();
+            });
+
+            function saveSettings() { localStorage.setItem('ruangbaca_settings', JSON.stringify({fontSize: state.fontSize, layout: state.layout, theme: state.theme})); }
+            function loadSettings() {
+                const settings = JSON.parse(localStorage.getItem('ruangbaca_settings'));
+                if (settings) {
+                    if(!state.isMobile || (state.isMobile && settings.layout === 'single')) {
+                         Object.assign(state, settings);
+                    }
+                    document.querySelector(`[data-action="theme-${state.theme}"]`)?.click();
+                    const fontBtn = document.querySelectorAll('[data-action^="font-"]')[state.fontSize];
+                    fontBtn?.click();
+                }
+            }
+            
+            document.getElementById('download-chapter').addEventListener('click', ()=>{
+                const chap = chapters[state.currentPage];
+                if(!chap || chap.id === 0) return alert("Tidak ada konten untuk diunduh di halaman ini.");
+                const blob = new Blob([`# ${chap.title}\n\n${chap.content.replace(/<[^>]*>?/gm, '')}`],{type:'text/plain'});
+                const a = document.createElement('a');
+                a.href=URL.createObjectURL(blob);
+                a.download=`${chap.title.replace(/[^a-z0-9]/gi,'_')}.txt`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            });
+            
+            window.addEventListener('resize', checkMobile);
+            loadSettings();
+            checkMobile();
+            renderTOC(el.tocList);
+        });
+    </script>
+</body>
+</html>
